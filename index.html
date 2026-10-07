@@ -576,44 +576,32 @@ async function loadAccountReport() {
       </div>
     </div>
 
-    <div class="two-col-grid">
-      <!-- Best Time Slots Table -->
-      <div class="card-block" style="margin-bottom:0">
-        <div style="padding:18px 22px;border-bottom:1px solid var(--border)">
-          <h2 class="section-title">⏰ Best Time Slots</h2>
-        </div>
-        <div class="table-responsive">
-          <table class="report-table">
-            <thead>
-              <tr>
-                <th>Time Slot</th>
-                <th>GMV</th>
-                <th>Average GMV</th>
-                <th>No of Slots</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${report.timeSlots.map(t => `
-                <tr>
-                  <td style="font-weight:700">${t.slot}</td>
-                  <td class="mono" style="font-weight:700">${formatVal(t.gmv, 'currency')}</td>
-                  <td class="mono">${formatVal(t.avgGmv, 'currency')}</td>
-                  <td class="mono">${t.slots}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
+    <!-- Best Time Slots Table -->
+    <div class="card-block">
+      <div style="padding:18px 22px;border-bottom:1px solid var(--border)">
+        <h2 class="section-title">⏰ Best Time Slots</h2>
       </div>
-
-      <!-- Quick Slot Performance Summary Stats -->
-      <div class="card-block" style="margin-bottom:0;padding:22px;display:flex;flex-direction:column;justify-content:center">
-        <div class="section-title">🎯 Key Slot Insights</div>
-        <div style="font-size:13px;line-height:1.6;color:var(--text-muted)">
-          <p>• <b>Morning session</b> recorded the highest Average GMV per slot at <b>RM 2,107.25</b> across 30 broadcast sessions.</p>
-          <p style="margin-top:10px">• <b>Noon slot</b> maintained steady performance at <b>RM 2,004.57</b> avg GMV.</p>
-          <p style="margin-top:10px">• Top performing host <b>Zaiffa</b> generated <b>RM 97,813.23</b> across 40 slots with an outstanding <b>2.00% CTOR</b>.</p>
-        </div>
+      <div class="table-responsive">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Time Slot</th>
+              <th>GMV</th>
+              <th>Average GMV</th>
+              <th>No of Slots</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${report.timeSlots.map(t => `
+              <tr>
+                <td style="font-weight:700">${t.slot}</td>
+                <td class="mono" style="font-weight:700">${formatVal(t.gmv, 'currency')}</td>
+                <td class="mono">${formatVal(t.avgGmv, 'currency')}</td>
+                <td class="mono">${t.slots}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -655,6 +643,16 @@ async function loadAccountReport() {
             }).join('')}
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Key Slot Insights (Bottom Summary) -->
+    <div class="card-block" style="margin-top:24px;padding:24px">
+      <h2 class="section-title">🎯 Key Performance Insights & Takeaways</h2>
+      <div style="font-size:13.5px;line-height:1.7;color:var(--text-muted)">
+        <p>• <b>Morning session</b> recorded the highest Average GMV per slot at <b>RM 2,107.25</b> across 30 broadcast sessions.</p>
+        <p style="margin-top:8px">• <b>Noon slot</b> maintained steady performance at <b>RM 2,004.57</b> avg GMV.</p>
+        <p style="margin-top:8px">• Top performing host <b>${report.hosts[0]?.host || 'Leader'}</b> achieved outstanding results with <b>${report.hosts[0]?.ctor || ''} CTOR</b>.</p>
       </div>
     </div>
   `;
