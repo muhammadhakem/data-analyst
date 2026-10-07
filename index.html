@@ -123,65 +123,32 @@ tbody td{padding:9px 14px;vertical-align:top}
 
 <script>
 // ══════════════════════════════════════════
-//  CONFIG — edit this array per account
+// CONFIG: Senarai sheet / account kau
 // ══════════════════════════════════════════
 const SHEETS = [
   {
-    id: 'akun1',
-    label: 'Akun 1',
+    id: 'demo',
+    label: 'Account 1 (Demo)',
     color: '#6366f1',
-    // Public sheet URL from browser address bar:
-    // https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
-    spreadsheetId: 'YOUR_SPREADSHEET_ID_1',
-    // Sheet tab name (exact, case-sensitive)
-    sheet: 'Sheet1',
-    // ponytail: gviz QUERY — change SELECT, WHERE, ORDER BY to suit your columns
-    query: 'SELECT * ORDER BY A DESC LIMIT 50'
-  },
-  {
-    id: 'akun2',
-    label: 'Akun 2',
-    color: '#22c55e',
-    spreadsheetId: 'YOUR_SPREADSHEET_ID_2',
-    sheet: 'Sheet1',
-    query: 'SELECT * ORDER BY A DESC LIMIT 50'
+    spreadsheetId: 'SAMPLE_ID', // Replace dengan Spreadsheet ID kau
+    sheet: '' // Nama Tab (kosongkan = tab pertama)
   }
 ];
-// Summary KPIs — column letters match your sheet columns (0-indexed: col 0 = A, 1 = B…)
-const KPI = [
-  { label: 'Total Rows', col: 0, fmt: 'num' },
-  // Example: { label: 'Revenue', col: 2, fmt: 'rp' },
-  // Example: { label: 'Orders', col: 3, fmt: 'num' },
-];
-// ══════════════════════════════════════════
 
 let activeId = SHEETS[0]?.id || null;
 
-function gvizUrl(cfg) {
-  return `https://docs.google.com/spreadsheets/d/${cfg.spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(cfg.sheet)}&tq=${encodeURIComponent(cfg.query)}`;
-}
-
-function fetchSheet(cfg) {
-  // ponytail: no-cache to always get fresh data
-  return fetch(gvizUrl(cfg), { cache: 'no-store' })
-    .then(r => r.text())
-    .then(raw => {
-      // Strip Google Visualization wrapper
-      const json = raw.replace(/^[^{]+/, '').replace(/;$/, '');
-      return JSON.parse(json);
-    })
-    .then(pkg => {
-      const cols = pkg.table.cols.map(c => (c.label || c.id || '').trim());
-      const rows = pkg.table.rows.map(r => r.c.map(v => (v?.v ?? '')));
-      return { cols, rows };
-    });
+async function fetchSheet(cfg) {
+  // Service Account API endpoint (supports private & hidden sheets)
+  const res = await fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(cfg.spreadsheetId)}&sheet=${encodeURIComponent(cfg.sheet || '')}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || data.error || 'Fetch failed');
+  return data;
 }
 
 function renderSidebar() {
   const list = document.getElementById('acc-list');
   list.innerHTML = SHEETS.map(s => `
-    <button class="acc-btn${s.id === activeId ? ' active' : ''}"
-      onclick="setActive('${s.id}')">
+    <button class="acc-btn${s.id === activeId ? ' active' : ''}" onclick="setActive('${s.id}')">
       <span class="acc-dot" style="background:${s.color}"></span>
       ${s.label}
     </button>`).join('');
@@ -194,60 +161,54 @@ function setActive(id) {
   if (window.innerWidth <= 680) document.getElementById('sidebar').classList.remove('open');
 }
 
-function loadActive() {
+async function loadActive() {
   const cfg = SHEETS.find(s => s.id === activeId);
   if (!cfg) return;
   document.getElementById('sheet-name').textContent = cfg.label;
-  document.getElementById('refresh-btn').disabled = true;
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
 
-  fetchSheet(cfg).then(({ cols, rows }) => {
-    renderKPIs(cols, rows);
+  try {
+    const { cols, rows } = await fetchSheet(cfg);
+    renderCards(cols, rows);
     renderTable(cols, rows);
-    document.getElementById('refresh-btn').disabled = false;
-    document.getElementById('tbl-body').innerHTML += '';
-  }).catch(err => {
+  } catch (err) {
     document.getElementById('summary-cards').innerHTML =
-      `<p style="color:var(--danger);padding:16px">Failed: ${err.message}</p>`;
-    document.getElementById('tbl-body').innerHTML = '';
+      `<div class="card" style="grid-column:1/-1;border-color:var(--danger)">
+        <div class="card-label" style="color:var(--danger)">Status</div>
+        <div style="font-size:0.85rem;color:var(--muted);margin-top:4px;">${err.message}</div>
+      </div>`;
     document.getElementById('tbl-head').innerHTML = '';
-    document.getElementById('refresh-btn').disabled = false;
-  });
+    document.getElementById('tbl-body').innerHTML = '';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
-// ponytail: KPI — derive from raw rows, no aggregation endpoint needed
-function renderKPIs(cols, rows) {
+function renderCards(cols, rows) {
   const el = document.getElementById('summary-cards');
-  if (!KPI.length) { el.innerHTML = ''; return; }
-  el.innerHTML = KPI.map(k => {
-    // Average if more than 1 row, else show raw value
-    const nums = rows.map(r => parseFloat(r[k.col])).filter(n => !isNaN(n));
-    const val = nums.length
-      ? (nums.length > 1 ? (nums.reduce((a,b)=>a+b,0)/nums.length).toFixed(1) : nums[0])
-      : rows.length;
-    return `<div class="card">
-      <div class="card-label">${k.label}</div>
-      <div class="card-val">${k.fmt==='rp'?'Rp ':''}${val}${k.fmt==='num'?'':''}</div>
-      <div class="card-sub">${rows.length} rows total</div>
-    </div>`;
-  }).join('');
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-label">Total Rows</div>
+      <div class="card-val">${rows.length.toLocaleString()}</div>
+      <div class="card-sub">Data entries</div>
+    </div>
+    <div class="card green">
+      <div class="card-label">Columns</div>
+      <div class="card-val">${cols.length}</div>
+      <div class="card-sub">Fields detected</div>
+    </div>
+  `;
 }
 
 function renderTable(cols, rows) {
-  document.getElementById('tbl-head').innerHTML =
-    `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
-  document.getElementById('tbl-body').innerHTML = rows.map(row =>
-    `<tr>${row.map((v,i) => {
-      const n = parseFloat(v);
-      const cls = !isNaN(n) && n > 0 ? 'positive' : (!isNaN(n) && n < 0 ? 'negative' : '');
-      const num = !isNaN(n) ? n.toLocaleString() : v;
-      return `<td class="${cls}">${num}</td>`;
-    }).join('')}</tr>`
-  ).join('');
+  document.getElementById('tbl-head').innerHTML = `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
+  document.getElementById('tbl-body').innerHTML = rows.map(r => `
+    <tr>${r.map(v => `<td>${v ?? ''}</td>`).join('')}</tr>
+  `).join('');
 }
 
-document.getElementById('menu-toggle').onclick = () =>
-  document.getElementById('sidebar').classList.toggle('open');
-
+document.getElementById('menu-toggle').onclick = () => document.getElementById('sidebar').classList.toggle('open');
 renderSidebar();
 if (activeId) loadActive();
 </script>
