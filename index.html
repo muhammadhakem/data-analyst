@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Data Analyst Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f8fafc;--surface:#fff;--border:#e2e8f0;--text:#0f172a;
+  --accent:#6366f1;--accent2:#8b5cf6;--muted:#64748b;--danger:#ef4444;
+  --success:#22c55e;--warn:#f59e0b;
+  --sidebar-w:260px;--header-h:52px;
+}
+html,body{height:100%;font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text)}
+body{display:flex;flex-direction:column}
+
+/* ── sidebar ── */
+#sidebar{
+  position:fixed;left:0;top:0;bottom:0;width:var(--sidebar-w);
+  background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;z-index:100;transition:transform .2s;
+}
+.sidebar-brand{
+  padding:14px 18px;font-size:.95rem;font-weight:700;
+  border-bottom:1px solid var(--border);
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff;letter-spacing:.3px;
+}
+.sidebar-accounts{
+  flex:1;overflow-y:auto;padding:8px 0;
+}
+.acc-btn{
+  display:flex;align-items:center;gap:10px;padding:10px 16px;
+  cursor:pointer;border:none;background:none;width:100%;
+  text-align:left;font-size:.875rem;color:var(--text);
+  transition:background .15s;
+}
+.acc-btn:hover{background:#f1f5f9}
+.acc-btn.active{background:#eef2ff;color:var(--accent);font-weight:600}
+.acc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sidebar-footer{padding:10px 16px;border-top:1px solid var(--border)}
+.credits{font-size:.7rem;color:var(--muted);text-align:center}
+
+/* ── main ── */
+#main{margin-left:var(--sidebar-w);min-height:100vh;display:flex;flex-direction:column}
+#header{
+  height:var(--header-h);background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;gap:12px;position:sticky;top:0;z-index:50;
+}
+#sheet-name{font-weight:600;font-size:.9rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#refresh-btn{
+  padding:6px 14px;font-size:.8rem;font-weight:600;
+  background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;
+}
+#refresh-btn:hover{background:#4f46e5}
+#refresh-btn:disabled{opacity:.5;cursor:not-allowed}
+
+#content{padding:20px;flex:1}
+
+/* ── summary cards ── */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:22px}
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:16px 18px;position:relative;overflow:hidden;
+}
+.card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
+.card.green::before{background:var(--success)}
+.card.red::before{background:var(--danger)}
+.card.warn::before{background:var(--warn)}
+.card-label{font-size:.7rem;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.card-val{font-size:1.6rem;font-weight:700}
+.card-sub{font-size:.72rem;color:var(--muted);margin-top:3px}
+
+/* ── table ── */
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+thead th{
+  background:#f8fafc;padding:10px 14px;text-align:left;font-weight:700;
+  font-size:.72rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
+  border-bottom:2px solid var(--border);white-space:nowrap;position:sticky;top:0;
+}
+tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+tbody tr:hover{background:#f8faff}
+tbody td{padding:9px 14px;vertical-align:top}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.positive{color:var(--success);font-weight:600}
+.negative{color:var(--danger);font-weight:600}
+
+/* ── mobile toggle ── */
+#menu-toggle{display:none;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-weight:600;font-size:.85rem}
+
+@media(max-width:680px){
+  #sidebar{transform:translateX(calc(-1 * var(--sidebar-w) - 2px))}
+  #sidebar.open{transform:translateX(0)}
+  #main{margin-left:0}
+  #menu-toggle{display:block}
+  .cards{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ SIDEBAR ══ -->
+<div id="sidebar">
+  <div class="sidebar-brand">📊 Data Analyst</div>
+  <div class="sidebar-accounts" id="acc-list"></div>
+  <div class="sidebar-footer"><div class="credits">Sheets → Dashboard<br>Vercel Deploy</div></div>
+</div>
+
+<!-- ══ MAIN ══ -->
+<div id="main">
+  <div id="header">
+    <button id="menu-toggle">☰ Menu</button>
+    <div id="sheet-name">Select a report</div>
+    <button id="refresh-btn" onclick="loadActive()">↻ Refresh</button>
+  </div>
+  <div id="content">
+    <div class="cards" id="summary-cards"></div>
+    <div class="table-wrap"><table id="tbl"><thead id="tbl-head"></thead><tbody id="tbl-body"></tbody></table></div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  CONFIG — edit this array per account
+// ══════════════════════════════════════════
+const SHEETS = [
+  {
+    id: 'akun1',
+    label: 'Akun 1',
+    color: '#6366f1',
+    // Public sheet URL from browser address bar:
+    // https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
+    spreadsheetId: 'YOUR_SPREADSHEET_ID_1',
+    // Sheet tab name (exact, case-sensitive)
+    sheet: 'Sheet1',
+    // ponytail: gviz QUERY — change SELECT, WHERE, ORDER BY to suit your columns
+    query: 'SELECT * ORDER BY A DESC LIMIT 50'
+  },
+  {
+    id: 'akun2',
+    label: 'Akun 2',
+    color: '#22c55e',
+    spreadsheetId: 'YOUR_SPREADSHEET_ID_2',
+    sheet: 'Sheet1',
+    query: 'SELECT * ORDER BY A DESC LIMIT 50'
+  }
+];
+// Summary KPIs — column letters match your sheet columns (0-indexed: col 0 = A, 1 = B…)
+const KPI = [
+  { label: 'Total Rows', col: 0, fmt: 'num' },
+  // Example: { label: 'Revenue', col: 2, fmt: 'rp' },
+  // Example: { label: 'Orders', col: 3, fmt: 'num' },
+];
+// ══════════════════════════════════════════
+
+let activeId = SHEETS[0]?.id || null;
+
+function gvizUrl(cfg) {
+  return `https://docs.google.com/spreadsheets/d/${cfg.spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(cfg.sheet)}&tq=${encodeURIComponent(cfg.query)}`;
+}
+
+function fetchSheet(cfg) {
+  // ponytail: no-cache to always get fresh data
+  return fetch(gvizUrl(cfg), { cache: 'no-store' })
+    .then(r => r.text())
+    .then(raw => {
+      // Strip Google Visualization wrapper
+      const json = raw.replace(/^[^{]+/, '').replace(/;$/, '');
+      return JSON.parse(json);
+    })
+    .then(pkg => {
+      const cols = pkg.table.cols.map(c => (c.label || c.id || '').trim());
+      const rows = pkg.table.rows.map(r => r.c.map(v => (v?.v ?? '')));
+      return { cols, rows };
+    });
+}
+
+function renderSidebar() {
+  const list = document.getElementById('acc-list');
+  list.innerHTML = SHEETS.map(s => `
+    <button class="acc-btn${s.id === activeId ? ' active' : ''}"
+      onclick="setActive('${s.id}')">
+      <span class="acc-dot" style="background:${s.color}"></span>
+      ${s.label}
+    </button>`).join('');
+}
+
+function setActive(id) {
+  activeId = id;
+  renderSidebar();
+  loadActive();
+  if (window.innerWidth <= 680) document.getElementById('sidebar').classList.remove('open');
+}
+
+function loadActive() {
+  const cfg = SHEETS.find(s => s.id === activeId);
+  if (!cfg) return;
+  document.getElementById('sheet-name').textContent = cfg.label;
+  document.getElementById('refresh-btn').disabled = true;
+
+  fetchSheet(cfg).then(({ cols, rows }) => {
+    renderKPIs(cols, rows);
+    renderTable(cols, rows);
+    document.getElementById('refresh-btn').disabled = false;
+    document.getElementById('tbl-body').innerHTML += '';
+  }).catch(err => {
+    document.getElementById('summary-cards').innerHTML =
+      `<p style="color:var(--danger);padding:16px">Failed: ${err.message}</p>`;
+    document.getElementById('tbl-body').innerHTML = '';
+    document.getElementById('tbl-head').innerHTML = '';
+    document.getElementById('refresh-btn').disabled = false;
+  });
+}
+
+// ponytail: KPI — derive from raw rows, no aggregation endpoint needed
+function renderKPIs(cols, rows) {
+  const el = document.getElementById('summary-cards');
+  if (!KPI.length) { el.innerHTML = ''; return; }
+  el.innerHTML = KPI.map(k => {
+    // Average if more than 1 row, else show raw value
+    const nums = rows.map(r => parseFloat(r[k.col])).filter(n => !isNaN(n));
+    const val = nums.length
+      ? (nums.length > 1 ? (nums.reduce((a,b)=>a+b,0)/nums.length).toFixed(1) : nums[0])
+      : rows.length;
+    return `<div class="card">
+      <div class="card-label">${k.label}</div>
+      <div class="card-val">${k.fmt==='rp'?'Rp ':''}${val}${k.fmt==='num'?'':''}</div>
+      <div class="card-sub">${rows.length} rows total</div>
+    </div>`;
+  }).join('');
+}
+
+function renderTable(cols, rows) {
+  document.getElementById('tbl-head').innerHTML =
+    `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
+  document.getElementById('tbl-body').innerHTML = rows.map(row =>
+    `<tr>${row.map((v,i) => {
+      const n = parseFloat(v);
+      const cls = !isNaN(n) && n > 0 ? 'positive' : (!isNaN(n) && n < 0 ? 'negative' : '');
+      const num = !isNaN(n) ? n.toLocaleString() : v;
+      return `<td class="${cls}">${num}</td>`;
+    }).join('')}</tr>`
+  ).join('');
+}
+
+document.getElementById('menu-toggle').onclick = () =>
+  document.getElementById('sidebar').classList.toggle('open');
+
+renderSidebar();
+if (activeId) loadActive();
+</script>
+</body>
+</html>
