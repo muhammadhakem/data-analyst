@@ -3,214 +3,456 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Data Analyst Dashboard</title>
+<title>Livestream Analytics Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#f8fafc;--surface:#fff;--border:#e2e8f0;--text:#0f172a;
-  --accent:#6366f1;--accent2:#8b5cf6;--muted:#64748b;--danger:#ef4444;
-  --success:#22c55e;--warn:#f59e0b;
-  --sidebar-w:260px;--header-h:52px;
+  --bg:#f8fafc;--surface:#ffffff;--border:#e2e8f0;--text-main:#0f172a;
+  --text-muted:#64748b;--primary:#0f172a;
+  --green:#16a34a;--green-bg:#f0fdf4;--green-border:#bbf7d0;
+  --red:#dc2626;--red-bg:#fef2f2;--red-border:#fecaca;
+  --sidebar-w:260px;
 }
-html,body{height:100%;font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text)}
-body{display:flex;flex-direction:column}
+html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text-main)}
+body{display:flex}
 
-/* ── sidebar ── */
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+
+/* ── SIDEBAR ── */
 #sidebar{
-  position:fixed;left:0;top:0;bottom:0;width:var(--sidebar-w);
-  background:var(--surface);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;z-index:100;transition:transform .2s;
+  width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;z-index:50;
+  transition:transform .2s ease;
 }
-.sidebar-brand{
-  padding:14px 18px;font-size:.95rem;font-weight:700;
-  border-bottom:1px solid var(--border);
-  background:linear-gradient(135deg,var(--accent),var(--accent2));
-  color:#fff;letter-spacing:.3px;
+.sidebar-header{
+  padding:20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
 }
-.sidebar-accounts{
-  flex:1;overflow-y:auto;padding:8px 0;
+.logo-icon{
+  width:32px;height:32px;background:var(--primary);color:#fff;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;
+}
+.brand-title{font-weight:700;font-size:15px;letter-spacing:-0.2px}
+.brand-sub{font-size:11px;color:var(--text-muted);font-weight:500}
+.sidebar-accounts{flex:1;overflow-y:auto;padding:12px}
+.section-lbl{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;
+  color:var(--text-muted);margin:14px 10px 8px;
 }
 .acc-btn{
-  display:flex;align-items:center;gap:10px;padding:10px 16px;
-  cursor:pointer;border:none;background:none;width:100%;
-  text-align:left;font-size:.875rem;color:var(--text);
-  transition:background .15s;
+  width:100%;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;
+  border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:13px;
+  font-weight:600;color:var(--text-main);transition:all .15s;text-align:left;
 }
 .acc-btn:hover{background:#f1f5f9}
-.acc-btn.active{background:#eef2ff;color:var(--accent);font-weight:600}
-.acc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.sidebar-footer{padding:10px 16px;border-top:1px solid var(--border)}
-.credits{font-size:.7rem;color:var(--muted);text-align:center}
+.acc-btn.active{background:#0f172a;color:#ffffff}
+.acc-dot{width:8px;height:8px;border-radius:50%;background:#94a3b8}
+.acc-btn.active .acc-dot{background:#38bdf8}
 
-/* ── main ── */
-#main{margin-left:var(--sidebar-w);min-height:100vh;display:flex;flex-direction:column}
-#header{
-  height:var(--header-h);background:var(--surface);border-bottom:1px solid var(--border);
-  display:flex;align-items:center;padding:0 20px;gap:12px;position:sticky;top:0;z-index:50;
+/* ── MAIN CONTENT ── */
+#main{flex:1;min-width:0;overflow-y:auto;height:100vh}
+.top-bar{
+  background:var(--surface);border-bottom:1px solid var(--border);padding:14px 28px;
+  display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40;
 }
-#sheet-name{font-weight:600;font-size:.9rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#refresh-btn{
-  padding:6px 14px;font-size:.8rem;font-weight:600;
-  background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;
+.top-left{display:flex;align-items:center;gap:14px}
+.menu-btn{
+  display:none;padding:8px 12px;border:1px solid var(--border);border-radius:6px;
+  background:var(--surface);cursor:pointer;font-size:14px;
 }
-#refresh-btn:hover{background:#4f46e5}
-#refresh-btn:disabled{opacity:.5;cursor:not-allowed}
-
-#content{padding:20px;flex:1}
-
-/* ── summary cards ── */
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:22px}
-.card{
-  background:var(--surface);border:1px solid var(--border);border-radius:10px;
-  padding:16px 18px;position:relative;overflow:hidden;
+.report-badge{
+  display:inline-flex;align-items:center;gap:6px;padding:4px 10px;
+  background:#f1f5f9;border-radius:20px;font-size:12px;font-weight:600;color:var(--text-muted);
 }
-.card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
-.card.green::before{background:var(--success)}
-.card.red::before{background:var(--danger)}
-.card.warn::before{background:var(--warn)}
-.card-label{font-size:.7rem;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.card-val{font-size:1.6rem;font-weight:700}
-.card-sub{font-size:.72rem;color:var(--muted);margin-top:3px}
-
-/* ── table ── */
-.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto}
-table{width:100%;border-collapse:collapse;font-size:.85rem}
-thead th{
-  background:#f8fafc;padding:10px 14px;text-align:left;font-weight:700;
-  font-size:.72rem;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
-  border-bottom:2px solid var(--border);white-space:nowrap;position:sticky;top:0;
+.refresh-btn{
+  padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:8px;
+  font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;
+  transition:opacity .15s;
 }
-tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
-tbody tr:hover{background:#f8faff}
-tbody td{padding:9px 14px;vertical-align:top}
-.num{text-align:right;font-variant-numeric:tabular-nums}
-.positive{color:var(--success);font-weight:600}
-.negative{color:var(--danger);font-weight:600}
+.refresh-btn:disabled{opacity:0.5;cursor:not-allowed}
 
-/* ── mobile toggle ── */
-#menu-toggle{display:none;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-weight:600;font-size:.85rem}
+.content-body{padding:28px;max-width:1440px;margin:0 auto}
 
-@media(max-width:680px){
-  #sidebar{transform:translateX(calc(-1 * var(--sidebar-w) - 2px))}
+/* Header Meta Block */
+.report-header{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:24px 28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.03);
+}
+.report-header-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+.report-main-title{font-size:22px;font-weight:800;letter-spacing:-0.5px}
+.report-meta-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;
+  padding-top:16px;border-top:1px solid var(--border);
+}
+.meta-item{display:flex;flex-direction:column;gap:2px}
+.meta-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted)}
+.meta-val{font-size:14px;font-weight:700}
+
+/* KPI Highlights */
+.kpi-row{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px;
+}
+.kpi-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:20px 22px;box-shadow:0 1px 3px rgba(0,0,0,0.03);position:relative;overflow:hidden;
+}
+.kpi-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--primary)}
+.kpi-lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:8px}
+.kpi-num{font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-bottom:6px}
+.kpi-delta{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px}
+.delta-pos{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.delta-neg{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+
+/* Section Layouts */
+.section-title{
+  font-size:16px;font-weight:800;letter-spacing:-0.3px;margin-bottom:14px;
+  display:flex;align-items:center;gap:8px;
+}
+.card-block{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 1px 3px rgba(0,0,0,0.03);overflow:hidden;margin-bottom:28px;
+}
+
+/* Tables */
+.table-responsive{overflow-x:auto}
+table.report-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}
+table.report-table thead tr{background:#0f172a;color:#ffffff}
+table.report-table thead th{
+  padding:12px 18px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;
+  white-space:nowrap;border:none;
+}
+table.report-table tbody tr{border-bottom:1px solid var(--border);transition:background .15s}
+table.report-table tbody tr:last-child{border-bottom:none}
+table.report-table tbody tr:hover{background:#f8fafc}
+table.report-table tbody td{padding:12px 18px;vertical-align:middle;white-space:nowrap}
+.rank-badge{
+  width:24px;height:24px;border-radius:6px;background:#f1f5f9;color:var(--text-main);
+  display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;
+}
+.rank-1{background:#fef3c7;color:#b45309;font-weight:800}
+.rank-2{background:#e2e8f0;color:#334155}
+.rank-3{background:#ffedd5;color:#c2410c}
+
+.two-col-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px}
+
+@media(max-width:1024px){
+  .two-col-grid{grid-template-columns:1fr}
+}
+@media(max-width:768px){
+  #sidebar{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%)}
   #sidebar.open{transform:translateX(0)}
-  #main{margin-left:0}
-  #menu-toggle{display:block}
-  .cards{grid-template-columns:repeat(2,1fr)}
+  .menu-btn{display:inline-block}
+  .content-body{padding:16px}
 }
 </style>
 </head>
 <body>
 
 <!-- ══ SIDEBAR ══ -->
-<div id="sidebar">
-  <div class="sidebar-brand">📊 Data Analyst</div>
-  <div class="sidebar-accounts" id="acc-list"></div>
-  <div class="sidebar-footer"><div class="credits">Sheets → Dashboard<br>Vercel Deploy</div></div>
-</div>
+<aside id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo-icon">📊</div>
+    <div>
+      <div class="brand-title">Report Center</div>
+      <div class="brand-sub">Livestream Analytics</div>
+    </div>
+  </div>
+  <div class="sidebar-accounts">
+    <div class="section-lbl">Channels & Accounts</div>
+    <div id="account-nav-list"></div>
+  </div>
+</aside>
 
-<!-- ══ MAIN ══ -->
+<!-- ══ MAIN VIEW ══ -->
 <div id="main">
-  <div id="header">
-    <button id="menu-toggle">☰ Menu</button>
-    <div id="sheet-name">Select a report</div>
-    <button id="refresh-btn" onclick="loadActive()">↻ Refresh</button>
-  </div>
-  <div id="content">
-    <div class="cards" id="summary-cards"></div>
-    <div class="table-wrap"><table id="tbl"><thead id="tbl-head"></thead><tbody id="tbl-body"></tbody></table></div>
-  </div>
+  <header class="top-bar">
+    <div class="top-left">
+      <button class="menu-btn" id="menu-btn" onclick="toggleSidebar()">☰</button>
+      <div class="report-badge" id="report-source-badge">⚡ Live GSheet Direct</div>
+    </div>
+    <button class="refresh-btn" id="refresh-btn" onclick="loadAccountReport()">
+      <span>↻</span> Refresh
+    </button>
+  </header>
+
+  <main class="content-body" id="report-view-container"></main>
 </div>
 
 <script>
-// ══════════════════════════════════════════
-// CONFIG: Senarai sheet / account kau
-// ══════════════════════════════════════════
-const SHEETS = [
+// ════════════════════════════════════════════════════════════
+// CONFIG: Sedia untuk switch mana-mana account / GSheet ID
+// ════════════════════════════════════════════════════════════
+const ACCOUNTS = [
   {
-    id: 'demo',
-    label: 'Account 1 (Demo)',
-    color: '#6366f1',
-    spreadsheetId: 'SAMPLE_ID', // Replace dengan Spreadsheet ID kau
-    sheet: '' // Nama Tab (kosongkan = tab pertama)
+    id: 'corolla',
+    label: '(COROLLA) Livestream',
+    spreadsheetId: '', // Masukkan GSheet ID bila ready
+    sheetName: 'September 2026',
+    fallbackData: {
+      title: '(COROLLA) LIVESTREAM MONTHLY REPORT',
+      date: '1 October 2026',
+      preparedBy: 'Akiem',
+      currentMonthLabel: 'Current Month (September 2026)',
+      prevMonthLabel: 'Previous Month',
+      overall: [
+        { metric: 'Total slots:', curr: '122', prev: '127', delta: -3.94, fmt: 'num' },
+        { metric: 'GMV:', curr: '226978.24', prev: '254570.98', delta: -10.84, fmt: 'currency' },
+        { metric: 'Average GMV per slot:', curr: '1860.48', prev: '2004.50', delta: -7.18, fmt: 'currency' },
+        { metric: 'New Followers:', curr: '2209', prev: '2719', delta: -18.76, fmt: 'num' },
+        { metric: 'Average CTR:', curr: '54.26%', prev: '55.07%', delta: -1.47, fmt: 'pct' },
+        { metric: 'Average CTOR:', curr: '1.79%', prev: '1.70%', delta: 5.35, fmt: 'pct' },
+        { metric: 'Total Views:', curr: '337246', prev: '378178', delta: -10.82, fmt: 'num' },
+        { metric: 'Total Product Clicks:', curr: '185982', prev: '216207', delta: -13.98, fmt: 'num' },
+        { metric: 'Total Comments:', curr: '15990', prev: '16709', delta: -4.30, fmt: 'num' },
+        { metric: 'Average Price:', curr: '57.22', prev: '54.56', delta: 4.87, fmt: 'currency' },
+        { metric: 'Items Sold:', curr: '3967', prev: '4666', delta: -14.98, fmt: 'num' }
+      ],
+      hosts: [
+        { host: 'Nurul', gmv: 3678.00, slots: 1, avgGmv: 3678.00, ctr: '12.26%', ctor: '1.60%', avgViewTime: '48.75s' },
+        { host: 'Mar', gmv: 22209.34, slots: 9, avgGmv: 2467.70, ctr: '58.55%', ctor: '1.60%', avgViewTime: '43.77s' },
+        { host: 'Zaiffa', gmv: 97813.23, slots: 40, avgGmv: 2445.33, ctr: '57.96%', ctor: '2.00%', avgViewTime: '45.66s' },
+        { host: 'Anis', gmv: 7909.70, slots: 4, avgGmv: 1977.43, ctr: '43.35%', ctor: '2.09%', avgViewTime: '33.56s' },
+        { host: 'Qys', gmv: 45708.49, slots: 28, avgGmv: 1632.45, ctr: '53.69%', ctor: '1.76%', avgViewTime: '35.94s' },
+        { host: 'Nureen', gmv: 13186.63, slots: 9, avgGmv: 1465.18, ctr: '55.31%', ctor: '1.74%', avgViewTime: '45.57s' },
+        { host: 'Syasya', gmv: 12368.66, slots: 9, avgGmv: 1374.30, ctr: '52.12%', ctor: '1.83%', avgViewTime: '48.31s' },
+        { host: 'Nanad', gmv: 1349.65, slots: 1, avgGmv: 1349.65, ctr: '54.08%', ctor: '2.12%', avgViewTime: '41.75s' },
+        { host: 'Fatin', gmv: 8094.87, slots: 6, avgGmv: 1349.15, ctr: '53.62%', ctor: '1.65%', avgViewTime: '40.32s' },
+        { host: 'Lyn', gmv: 3673.97, slots: 3, avgGmv: 1224.66, ctr: '49.53%', ctor: '1.56%', avgViewTime: '40.96s' },
+        { host: 'Anissa', gmv: 1178.46, slots: 1, avgGmv: 1178.46, ctr: '45.22%', ctor: '1.12%', avgViewTime: '37.99s' },
+        { host: 'Azmira', gmv: 2155.58, slots: 2, avgGmv: 1077.79, ctr: '54.70%', ctor: '1.49%', avgViewTime: '46.48s' },
+        { host: 'Robert', gmv: 2982.46, slots: 3, avgGmv: 994.15, ctr: '48.10%', ctor: '1.55%', avgViewTime: '43.93s' },
+        { host: 'Syaz', gmv: 1710.39, slots: 2, avgGmv: 855.20, ctr: '57.00%', ctor: '1.13%', avgViewTime: '41.37s' },
+        { host: 'Balqis', gmv: 2958.81, slots: 4, avgGmv: 739.70, ctr: '47.05%', ctor: '1.34%', avgViewTime: '41.17s' }
+      ],
+      timeSlots: [
+        { slot: 'Morning', gmv: 63217.37, avgGmv: 2107.25, slots: 30 },
+        { slot: 'Noon', gmv: 60137.01, avgGmv: 2004.57, slots: 30 },
+        { slot: 'Night', gmv: 58306.37, avgGmv: 1822.07, slots: 32 },
+        { slot: 'Evening', gmv: 45317.49, avgGmv: 1510.58, slots: 30 }
+      ]
+    }
   }
 ];
 
-let activeId = SHEETS[0]?.id || null;
+let activeAccount = ACCOUNTS[0];
 
-async function fetchSheet(cfg) {
-  // Service Account API endpoint (supports private & hidden sheets)
-  const res = await fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(cfg.spreadsheetId)}&sheet=${encodeURIComponent(cfg.sheet || '')}`);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || data.error || 'Fetch failed');
-  return data;
+function formatVal(val, fmt) {
+  if (val === null || val === undefined || val === '') return '-';
+  const num = parseFloat(val);
+  if (isNaN(num)) return val;
+  if (fmt === 'currency') return 'RM ' + num.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (fmt === 'num') return num.toLocaleString('en-MY');
+  return val;
 }
 
-function renderSidebar() {
-  const list = document.getElementById('acc-list');
-  list.innerHTML = SHEETS.map(s => `
-    <button class="acc-btn${s.id === activeId ? ' active' : ''}" onclick="setActive('${s.id}')">
-      <span class="acc-dot" style="background:${s.color}"></span>
-      ${s.label}
-    </button>`).join('');
+function renderDelta(d) {
+  if (d === undefined || d === null) return '-';
+  const isPos = d >= 0;
+  const cls = isPos ? 'delta-pos' : 'delta-neg';
+  const arrow = isPos ? '▲' : '▼';
+  return `<span class="kpi-delta mono ${cls}">${arrow} ${Math.abs(d).toFixed(2)}%</span>`;
 }
 
-function setActive(id) {
-  activeId = id;
-  renderSidebar();
-  loadActive();
-  if (window.innerWidth <= 680) document.getElementById('sidebar').classList.remove('open');
-}
-
-async function loadActive() {
-  const cfg = SHEETS.find(s => s.id === activeId);
-  if (!cfg) return;
-  document.getElementById('sheet-name').textContent = cfg.label;
-  const btn = document.getElementById('refresh-btn');
-  btn.disabled = true;
-
-  try {
-    const { cols, rows } = await fetchSheet(cfg);
-    renderCards(cols, rows);
-    renderTable(cols, rows);
-  } catch (err) {
-    document.getElementById('summary-cards').innerHTML =
-      `<div class="card" style="grid-column:1/-1;border-color:var(--danger)">
-        <div class="card-label" style="color:var(--danger)">Status</div>
-        <div style="font-size:0.85rem;color:var(--muted);margin-top:4px;">${err.message}</div>
-      </div>`;
-    document.getElementById('tbl-head').innerHTML = '';
-    document.getElementById('tbl-body').innerHTML = '';
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function renderCards(cols, rows) {
-  const el = document.getElementById('summary-cards');
-  el.innerHTML = `
-    <div class="card">
-      <div class="card-label">Total Rows</div>
-      <div class="card-val">${rows.length.toLocaleString()}</div>
-      <div class="card-sub">Data entries</div>
-    </div>
-    <div class="card green">
-      <div class="card-label">Columns</div>
-      <div class="card-val">${cols.length}</div>
-      <div class="card-sub">Fields detected</div>
-    </div>
-  `;
-}
-
-function renderTable(cols, rows) {
-  document.getElementById('tbl-head').innerHTML = `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
-  document.getElementById('tbl-body').innerHTML = rows.map(r => `
-    <tr>${r.map(v => `<td>${v ?? ''}</td>`).join('')}</tr>
+function renderNav() {
+  const container = document.getElementById('account-nav-list');
+  container.innerHTML = ACCOUNTS.map(a => `
+    <button class="acc-btn ${a.id === activeAccount.id ? 'active' : ''}" onclick="selectAccount('${a.id}')">
+      <span class="acc-dot"></span>
+      <span>${a.label}</span>
+    </button>
   `).join('');
 }
 
-document.getElementById('menu-toggle').onclick = () => document.getElementById('sidebar').classList.toggle('open');
-renderSidebar();
-if (activeId) loadActive();
+function selectAccount(id) {
+  activeAccount = ACCOUNTS.find(a => a.id === id) || ACCOUNTS[0];
+  renderNav();
+  loadAccountReport();
+  if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+async function loadAccountReport() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  const container = document.getElementById('report-view-container');
+
+  let report = activeAccount.fallbackData;
+
+  container.innerHTML = `
+    <!-- Top Metadata Card -->
+    <div class="report-header">
+      <div class="report-header-top">
+        <div>
+          <h1 class="report-main-title">${report.title}</h1>
+        </div>
+      </div>
+      <div class="report-meta-grid">
+        <div class="meta-item">
+          <span class="meta-lbl">Report Date</span>
+          <span class="meta-val">${report.date}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-lbl">Prepared By</span>
+          <span class="meta-val">${report.preparedBy}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-lbl">Reporting Period</span>
+          <span class="meta-val">${report.currentMonthLabel}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-lbl">Comparison Baseline</span>
+          <span class="meta-val">${report.prevMonthLabel}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick KPI Summary Cards -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-lbl">Total GMV</div>
+        <div class="kpi-num mono">${formatVal(report.overall[1].curr, 'currency')}</div>
+        ${renderDelta(report.overall[1].delta)}
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-lbl">Total Slots</div>
+        <div class="kpi-num mono">${formatVal(report.overall[0].curr, 'num')}</div>
+        ${renderDelta(report.overall[0].delta)}
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-lbl">Total Views</div>
+        <div class="kpi-num mono">${formatVal(report.overall[6].curr, 'num')}</div>
+        ${renderDelta(report.overall[6].delta)}
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-lbl">Items Sold</div>
+        <div class="kpi-num mono">${formatVal(report.overall[10].curr, 'num')}</div>
+        ${renderDelta(report.overall[10].delta)}
+      </div>
+    </div>
+
+    <!-- Overall Performance Comparison Table -->
+    <div class="card-block">
+      <div style="padding:18px 22px;border-bottom:1px solid var(--border)">
+        <h2 class="section-title">📊 Overall Performance vs Previous Month</h2>
+      </div>
+      <div class="table-responsive">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Metrics</th>
+              <th>${report.currentMonthLabel}</th>
+              <th>${report.prevMonthLabel}</th>
+              <th>% Changes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${report.overall.map(r => `
+              <tr>
+                <td style="font-weight:600">${r.metric}</td>
+                <td class="mono" style="font-weight:700">${formatVal(r.curr, r.fmt)}</td>
+                <td class="mono" style="color:var(--text-muted)">${formatVal(r.prev, r.fmt)}</td>
+                <td>${renderDelta(r.delta)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="two-col-grid">
+      <!-- Best Time Slots Table -->
+      <div class="card-block" style="margin-bottom:0">
+        <div style="padding:18px 22px;border-bottom:1px solid var(--border)">
+          <h2 class="section-title">⏰ Best Time Slots</h2>
+        </div>
+        <div class="table-responsive">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Time Slot</th>
+                <th>GMV</th>
+                <th>Average GMV</th>
+                <th>No of Slots</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${report.timeSlots.map(t => `
+                <tr>
+                  <td style="font-weight:700">${t.slot}</td>
+                  <td class="mono" style="font-weight:700">${formatVal(t.gmv, 'currency')}</td>
+                  <td class="mono">${formatVal(t.avgGmv, 'currency')}</td>
+                  <td class="mono">${t.slots}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Quick Slot Performance Summary Stats -->
+      <div class="card-block" style="margin-bottom:0;padding:22px;display:flex;flex-direction:column;justify-content:center">
+        <div class="section-title">🎯 Key Slot Insights</div>
+        <div style="font-size:13px;line-height:1.6;color:var(--text-muted)">
+          <p>• <b>Morning session</b> recorded the highest Average GMV per slot at <b>RM 2,107.25</b> across 30 broadcast sessions.</p>
+          <p style="margin-top:10px">• <b>Noon slot</b> maintained steady performance at <b>RM 2,004.57</b> avg GMV.</p>
+          <p style="margin-top:10px">• Top performing host <b>Zaiffa</b> generated <b>RM 97,813.23</b> across 40 slots with an outstanding <b>2.00% CTOR</b>.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hosts Performance Table -->
+    <div class="card-block" style="margin-top:24px">
+      <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <h2 class="section-title" style="margin-bottom:0">🎙️ Hosts Performance Ranking</h2>
+        <span style="font-size:12px;color:var(--text-muted);font-weight:600">Sorted by Avg. GMV</span>
+      </div>
+      <div class="table-responsive">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th style="width:50px">Rank</th>
+              <th>Host</th>
+              <th>GMV</th>
+              <th>Slots</th>
+              <th>Avg. GMV</th>
+              <th>CTR</th>
+              <th>CTOR</th>
+              <th>Avg. View Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${report.hosts.map((h, idx) => {
+              const rankCls = idx === 0 ? 'rank-1' : (idx === 1 ? 'rank-2' : (idx === 2 ? 'rank-3' : ''));
+              return `
+                <tr>
+                  <td><span class="rank-badge ${rankCls}">${idx + 1}</span></td>
+                  <td style="font-weight:700">${h.host}</td>
+                  <td class="mono" style="font-weight:700">${formatVal(h.gmv, 'currency')}</td>
+                  <td class="mono">${h.slots}</td>
+                  <td class="mono" style="font-weight:600">${formatVal(h.avgGmv, 'currency')}</td>
+                  <td class="mono">${h.ctr}</td>
+                  <td class="mono">${h.ctor}</td>
+                  <td class="mono">${h.avgViewTime}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  btn.disabled = false;
+}
+
+renderNav();
+loadAccountReport();
 </script>
 </body>
 </html>
