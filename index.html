@@ -187,12 +187,14 @@ table.report-table tbody td{padding:12px 18px;vertical-align:middle;white-space:
 // ════════════════════════════════════════════════════════════
 const ACCOUNTS = [
   {
-    id: 'corolla',
-    label: '(COROLLA) Livestream',
-    spreadsheetId: '', // Masukkan GSheet ID bila ready
+    id: 'corolla-tiktok',
+    brand: 'Corolla',
+    platform: 'TikTok',
+    label: 'Corolla (TikTok)',
+    spreadsheetId: '',
     sheetName: 'September 2026',
     fallbackData: {
-      title: '(COROLLA) LIVESTREAM MONTHLY REPORT',
+      title: '(COROLLA) TIKTOK LIVESTREAM REPORT',
       date: '1 October 2026',
       preparedBy: 'Akiem',
       currentMonthLabel: 'Current Month (September 2026)',
@@ -234,6 +236,203 @@ const ACCOUNTS = [
         { slot: 'Evening', gmv: 45317.49, avgGmv: 1510.58, slots: 30 }
       ]
     }
+  },
+  {
+    id: 'corolla-shopee',
+    brand: 'Corolla',
+    platform: 'Shopee',
+    label: 'Corolla (Shopee)',
+    spreadsheetId: '',
+    sheetName: 'September 2026',
+    fallbackData: {
+      title: '(COROLLA) SHOPEE LIVESTREAM REPORT',
+      date: '1 October 2026',
+      preparedBy: 'Akiem',
+      currentMonthLabel: 'Current Month (September 2026)',
+      prevMonthLabel: 'Previous Month',
+      overall: [
+        { metric: 'Total slots:', curr: '84', prev: '78', delta: 7.69, fmt: 'num' },
+        { metric: 'GMV:', curr: '142850.50', prev: '128400.00', delta: 11.25, fmt: 'currency' },
+        { metric: 'Average GMV per slot:', curr: '1700.60', prev: '1646.15', delta: 3.31, fmt: 'currency' },
+        { metric: 'New Followers:', curr: '1430', prev: '1210', delta: 18.18, fmt: 'num' },
+        { metric: 'Average CTR:', curr: '48.10%', prev: '45.20%', delta: 6.42, fmt: 'pct' },
+        { metric: 'Average CTOR:', curr: '2.10%', prev: '1.95%', delta: 7.69, fmt: 'pct' },
+        { metric: 'Total Views:', curr: '215400', prev: '198000', delta: 8.79, fmt: 'num' },
+        { metric: 'Total Product Clicks:', curr: '103600', prev: '89500', delta: 15.75, fmt: 'num' },
+        { metric: 'Total Comments:', curr: '9840', prev: '8700', delta: 13.10, fmt: 'num' },
+        { metric: 'Average Price:', curr: '62.40', prev: '59.80', delta: 4.35, fmt: 'currency' },
+        { metric: 'Items Sold:', curr: '2289', prev: '2147', delta: 6.61, fmt: 'num' }
+      ],
+      hosts: [
+        { host: 'Zaiffa', gmv: 62450.00, slots: 28, avgGmv: 2230.35, ctr: '52.10%', ctor: '2.30%', avgViewTime: '42.10s' },
+        { host: 'Mar', gmv: 38200.50, slots: 20, avgGmv: 1910.02, ctr: '49.80%', ctor: '2.05%', avgViewTime: '39.40s' },
+        { host: 'Qys', gmv: 28100.00, slots: 22, avgGmv: 1277.27, ctr: '44.30%', ctor: '1.80%', avgViewTime: '34.20s' },
+        { host: 'Nureen', gmv: 14100.00, slots: 14, avgGmv: 1007.14, ctr: '42.50%', ctor: '1.60%', avgViewTime: '36.80s' }
+      ],
+      timeSlots: [
+        { slot: 'Night', gmv: 52400.00, avgGmv: 2183.33, slots: 24 },
+        { slot: 'Evening', gmv: 41200.00, avgGmv: 1872.72, slots: 22 },
+        { slot: 'Noon', gmv: 28150.50, avgGmv: 1407.52, slots: 20 },
+        { slot: 'Morning', gmv: 21100.00, avgGmv: 1172.22, slots: 18 }
+      ]
+    }
+  },
+  {
+    id: 'at-shopee',
+    brand: 'American Tourister',
+    platform: 'Shopee',
+    label: 'American Tourister (Shopee)',
+    spreadsheetId: '',
+    sheetName: 'September 2026',
+    fallbackData: {
+      title: '(AMERICAN TOURISTER) SHOPEE LIVESTREAM REPORT',
+      date: '1 October 2026',
+      preparedBy: 'Akiem',
+      currentMonthLabel: 'Current Month (September 2026)',
+      prevMonthLabel: 'Previous Month',
+      overall: [
+        { metric: 'Total slots:', curr: '96', prev: '90', delta: 6.67, fmt: 'num' },
+        { metric: 'GMV:', curr: '312450.00', prev: '289100.00', delta: 8.08, fmt: 'currency' },
+        { metric: 'Average GMV per slot:', curr: '3254.68', prev: '3212.22', delta: 1.32, fmt: 'currency' },
+        { metric: 'New Followers:', curr: '3120', prev: '2890', delta: 7.96, fmt: 'num' },
+        { metric: 'Average CTR:', curr: '41.20%', prev: '39.80%', delta: 3.52, fmt: 'pct' },
+        { metric: 'Average CTOR:', curr: '2.45%', prev: '2.30%', delta: 6.52, fmt: 'pct' },
+        { metric: 'Total Views:', curr: '412000', prev: '385000', delta: 7.01, fmt: 'num' },
+        { metric: 'Total Product Clicks:', curr: '169744', prev: '153230', delta: 10.78, fmt: 'num' },
+        { metric: 'Total Comments:', curr: '18400', prev: '17100', delta: 7.60, fmt: 'num' },
+        { metric: 'Average Price:', curr: '248.50', prev: '242.00', delta: 2.69, fmt: 'currency' },
+        { metric: 'Items Sold:', curr: '1257', prev: '1194', delta: 5.28, fmt: 'num' }
+      ],
+      hosts: [
+        { host: 'Zaiffa', gmv: 142000.00, slots: 36, avgGmv: 3944.44, ctr: '44.50%', ctor: '2.80%', avgViewTime: '52.10s' },
+        { host: 'Mar', gmv: 98450.00, slots: 30, avgGmv: 3281.66, ctr: '42.10%', ctor: '2.40%', avgViewTime: '48.30s' },
+        { host: 'Qys', gmv: 72000.00, slots: 30, avgGmv: 2400.00, ctr: '37.80%', ctor: '2.10%', avgViewTime: '41.20s' }
+      ],
+      timeSlots: [
+        { slot: 'Night', gmv: 125000.00, avgGmv: 4166.66, slots: 30 },
+        { slot: 'Evening', gmv: 88450.00, avgGmv: 3401.92, slots: 26 },
+        { slot: 'Noon', gmv: 59000.00, avgGmv: 2681.81, slots: 22 },
+        { slot: 'Morning', gmv: 40000.00, avgGmv: 2222.22, slots: 18 }
+      ]
+    }
+  },
+  {
+    id: 'at-tiktok',
+    brand: 'American Tourister',
+    platform: 'TikTok',
+    label: 'American Tourister (TikTok)',
+    spreadsheetId: '',
+    sheetName: 'September 2026',
+    fallbackData: {
+      title: '(AMERICAN TOURISTER) TIKTOK LIVESTREAM REPORT',
+      date: '1 October 2026',
+      preparedBy: 'Akiem',
+      currentMonthLabel: 'Current Month (September 2026)',
+      prevMonthLabel: 'Previous Month',
+      overall: [
+        { metric: 'Total slots:', curr: '88', prev: '80', delta: 10.00, fmt: 'num' },
+        { metric: 'GMV:', curr: '198700.00', prev: '175200.00', delta: 13.41, fmt: 'currency' },
+        { metric: 'Average GMV per slot:', curr: '2257.95', prev: '2190.00', delta: 3.10, fmt: 'currency' },
+        { metric: 'New Followers:', curr: '4200', prev: '3600', delta: 16.67, fmt: 'num' },
+        { metric: 'Average CTR:', curr: '51.30%', prev: '48.70%', delta: 5.34, fmt: 'pct' },
+        { metric: 'Average CTOR:', curr: '1.92%', prev: '1.81%', delta: 6.08, fmt: 'pct' },
+        { metric: 'Total Views:', curr: '489000', prev: '420000', delta: 16.43, fmt: 'num' },
+        { metric: 'Total Product Clicks:', curr: '250857', prev: '204540', delta: 22.64, fmt: 'num' },
+        { metric: 'Total Comments:', curr: '21400', prev: '18900', delta: 13.23, fmt: 'num' },
+        { metric: 'Average Price:', curr: '210.00', prev: '205.00', delta: 2.44, fmt: 'currency' },
+        { metric: 'Items Sold:', curr: '946', prev: '854', delta: 10.77, fmt: 'num' }
+      ],
+      hosts: [
+        { host: 'Zaiffa', gmv: 88500.00, slots: 32, avgGmv: 2765.62, ctr: '54.20%', ctor: '2.10%', avgViewTime: '49.00s' },
+        { host: 'Qys', gmv: 62400.00, slots: 30, avgGmv: 2080.00, ctr: '51.00%', ctor: '1.90%', avgViewTime: '44.50s' },
+        { host: 'Mar', gmv: 47800.00, slots: 26, avgGmv: 1838.46, ctr: '48.50%', ctor: '1.75%', avgViewTime: '40.20s' }
+      ],
+      timeSlots: [
+        { slot: 'Night', gmv: 82000.00, avgGmv: 3037.03, slots: 27 },
+        { slot: 'Evening', gmv: 54700.00, avgGmv: 2378.26, slots: 23 },
+        { slot: 'Noon', gmv: 38000.00, avgGmv: 1900.00, slots: 20 },
+        { slot: 'Morning', gmv: 24000.00, avgGmv: 1333.33, slots: 18 }
+      ]
+    }
+  },
+  {
+    id: 'samsonite-shopee',
+    brand: 'Samsonite',
+    platform: 'Shopee',
+    label: 'Samsonite (Shopee)',
+    spreadsheetId: '',
+    sheetName: 'September 2026',
+    fallbackData: {
+      title: '(SAMSONITE) SHOPEE LIVESTREAM REPORT',
+      date: '1 October 2026',
+      preparedBy: 'Akiem',
+      currentMonthLabel: 'Current Month (September 2026)',
+      prevMonthLabel: 'Previous Month',
+      overall: [
+        { metric: 'Total slots:', curr: '60', prev: '60', delta: 0.00, fmt: 'num' },
+        { metric: 'GMV:', curr: '485600.00', prev: '452100.00', delta: 7.41, fmt: 'currency' },
+        { metric: 'Average GMV per slot:', curr: '8093.33', prev: '7535.00', delta: 7.41, fmt: 'currency' },
+        { metric: 'New Followers:', curr: '1850', prev: '1720', delta: 7.56, fmt: 'num' },
+        { metric: 'Average CTR:', curr: '38.40%', prev: '36.90%', delta: 4.07, fmt: 'pct' },
+        { metric: 'Average CTOR:', curr: '3.10%', prev: '2.95%', delta: 5.08, fmt: 'pct' },
+        { metric: 'Total Views:', curr: '280000', prev: '265000', delta: 5.66, fmt: 'num' },
+        { metric: 'Total Product Clicks:', curr: '107520', prev: '97785', delta: 9.96, fmt: 'num' },
+        { metric: 'Total Comments:', curr: '12400', prev: '11800', delta: 5.08, fmt: 'num' },
+        { metric: 'Average Price:', curr: '850.00', prev: '820.00', delta: 3.66, fmt: 'currency' },
+        { metric: 'Items Sold:', curr: '571', prev: '551', delta: 3.63, fmt: 'num' }
+      ],
+      hosts: [
+        { host: 'Zaiffa', gmv: 260000.00, slots: 28, avgGmv: 9285.71, ctr: '41.20%', ctor: '3.40%', avgViewTime: '58.00s' },
+        { host: 'Mar', gmv: 145600.00, slots: 18, avgGmv: 8088.88, ctr: '38.50%', ctor: '3.10%', avgViewTime: '54.20s' },
+        { host: 'Qys', gmv: 80000.00, slots: 14, avgGmv: 5714.28, ctr: '34.80%', ctor: '2.70%', avgViewTime: '46.00s' }
+      ],
+      timeSlots: [
+        { slot: 'Night', gmv: 220000.00, avgGmv: 11000.00, slots: 20 },
+        { slot: 'Evening', gmv: 155600.00, avgGmv: 8644.44, slots: 18 },
+        { slot: 'Noon', gmv: 70000.00, avgGmv: 5833.33, slots: 12 },
+        { slot: 'Morning', gmv: 40000.00, avgGmv: 4000.00, slots: 10 }
+      ]
+    }
+  },
+  {
+    id: 'cadbury-tiktok',
+    brand: 'Cadbury DairyMilk',
+    platform: 'TikTok',
+    label: 'Cadbury DairyMilk (TikTok)',
+    spreadsheetId: '',
+    sheetName: 'September 2026',
+    fallbackData: {
+      title: '(CADBURY DAIRYMILK) TIKTOK LIVESTREAM REPORT',
+      date: '1 October 2026',
+      preparedBy: 'Akiem',
+      currentMonthLabel: 'Current Month (September 2026)',
+      prevMonthLabel: 'Previous Month',
+      overall: [
+        { metric: 'Total slots:', curr: '110', prev: '100', delta: 10.00, fmt: 'num' },
+        { metric: 'GMV:', curr: '178400.00', prev: '155200.00', delta: 14.95, fmt: 'currency' },
+        { metric: 'Average GMV per slot:', curr: '1621.81', prev: '1552.00', delta: 4.50, fmt: 'currency' },
+        { metric: 'New Followers:', curr: '5800', prev: '4900', delta: 18.37, fmt: 'num' },
+        { metric: 'Average CTR:', curr: '62.40%', prev: '59.80%', delta: 4.35, fmt: 'pct' },
+        { metric: 'Average CTOR:', curr: '2.80%', prev: '2.60%', delta: 7.69, fmt: 'pct' },
+        { metric: 'Total Views:', curr: '620000', prev: '540000', delta: 14.81, fmt: 'num' },
+        { metric: 'Total Product Clicks:', curr: '386880', prev: '322920', delta: 19.81, fmt: 'num' },
+        { metric: 'Total Comments:', curr: '34200', prev: '29800', delta: 14.77, fmt: 'num' },
+        { metric: 'Average Price:', curr: '28.50', prev: '27.00', delta: 5.56, fmt: 'currency' },
+        { metric: 'Items Sold:', curr: '6259', prev: '5748', delta: 8.89, fmt: 'num' }
+      ],
+      hosts: [
+        { host: 'Zaiffa', gmv: 75000.00, slots: 38, avgGmv: 1973.68, ctr: '65.20%', ctor: '3.10%', avgViewTime: '44.00s' },
+        { host: 'Mar', gmv: 48400.00, slots: 30, avgGmv: 1613.33, ctr: '63.00%', ctor: '2.85%', avgViewTime: '41.50s' },
+        { host: 'Qys', gmv: 36000.00, slots: 24, avgGmv: 1500.00, ctr: '60.50%', ctor: '2.60%', avgViewTime: '38.00s' },
+        { host: 'Nurul', gmv: 19000.00, slots: 18, avgGmv: 1055.55, ctr: '57.20%', ctor: '2.20%', avgViewTime: '35.00s' }
+      ],
+      timeSlots: [
+        { slot: 'Night', gmv: 68000.00, avgGmv: 2125.00, slots: 32 },
+        { slot: 'Evening', gmv: 49400.00, avgGmv: 1764.28, slots: 28 },
+        { slot: 'Noon', gmv: 37000.00, avgGmv: 1423.07, slots: 26 },
+        { slot: 'Morning', gmv: 24000.00, avgGmv: 1000.00, slots: 24 }
+      ]
+    }
   }
 ];
 
@@ -258,12 +457,24 @@ function renderDelta(d) {
 
 function renderNav() {
   const container = document.getElementById('account-nav-list');
-  container.innerHTML = ACCOUNTS.map(a => `
-    <button class="acc-btn ${a.id === activeAccount.id ? 'active' : ''}" onclick="selectAccount('${a.id}')">
-      <span class="acc-dot"></span>
-      <span>${a.label}</span>
-    </button>
-  `).join('');
+  // Group by brand
+  const brands = [...new Set(ACCOUNTS.map(a => a.brand))];
+  container.innerHTML = brands.map(brand => {
+    const list = ACCOUNTS.filter(a => a.brand === brand);
+    return `
+      <div style="font-size:11px;font-weight:800;color:var(--text-muted);margin:12px 6px 6px;text-transform:uppercase;letter-spacing:0.5px">${brand}</div>
+      ${list.map(a => {
+        const isTT = a.platform === 'TikTok';
+        const badgeBg = isTT ? '#0f172a' : '#ee4d2d';
+        return `
+          <button class="acc-btn ${a.id === activeAccount.id ? 'active' : ''}" onclick="selectAccount('${a.id}')" style="justify-content:space-between">
+            <span style="font-weight:600">${a.platform}</span>
+            <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:${badgeBg};color:#fff;font-weight:700">${a.platform}</span>
+          </button>
+        `;
+      }).join('')}
+    `;
+  }).join('');
 }
 
 function selectAccount(id) {
