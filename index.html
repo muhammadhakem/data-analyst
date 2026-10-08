@@ -310,7 +310,8 @@ async function liveReport() {
   const H = data.cols;
   const I = {};
   H.forEach((c, i) => I[c] = i);
-  const get = (r, k) => { const i = I[k]; return (i !== undefined && i < r.length) ? r[i] : ''; };
+  // ponytail: rows wrapped as {c:row}; get handles both shapes
+  const get = (r, k) => { const i = I[k]; const row = r.c || r; return (i === undefined || i >= row.length) ? '' : row[i]; };
   const num = (v) => { const s = String(v ?? '').replace(/[^0-9.\-]/g, ''); return s ? parseFloat(s) : 0; };
   const mon = (r) => String(get(r, 'Start time')).slice(0, 7);
   const cur = (v) => 'RM ' + num(v).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -340,19 +341,20 @@ async function liveReport() {
   };
   const A = agg(pick(curM));
   const B = prevM ? agg(pick(prevM)) : null;
-  const d = (a, b) => b ? (((a - b) / b) * 100) : 0;
+  // ponytail: d takes optional guard; never deref B.slots before null-check
+  const D = (a, b) => (a == null || b == null) ? null : (((a - b) / b) * 100);
   const overall = [
-    { metric: 'Total slots:', curr: A.slots, prev: B ? B.slots : 0, delta: d(A.slots, B.slots), fmt: 'num' },
-    { metric: 'GMV:', curr: A.gmv, prev: B ? B.gmv : 0, delta: d(A.gmv, B.gmv), fmt: 'currency' },
-    { metric: 'Average GMV per slot:', curr: A.gmv / A.slots, prev: B ? B.gmv / B.slots : 0, delta: d(A.gmv / A.slots, B ? B.gmv / B.slots : 0), fmt: 'currency' },
-    { metric: 'New Followers:', curr: A.fol, prev: B ? B.fol : 0, delta: d(A.fol, B.fol), fmt: 'num' },
-    { metric: 'Average LIVE CTR:', curr: A.live, prev: B ? B.live : 0, delta: d(A.live, B.live), fmt: 'pct' },
-    { metric: 'Average CTOR:', curr: A.ctor, prev: B ? B.ctor : 0, delta: d(A.ctor, B.ctor), fmt: 'pct' },
-    { metric: 'Total Views:', curr: A.views, prev: B ? B.views : 0, delta: d(A.views, B.views), fmt: 'num' },
-    { metric: 'Total Product Clicks:', curr: A.click, prev: B ? B.click : 0, delta: d(A.click, B.click), fmt: 'num' },
-    { metric: 'Total Comments:', curr: A.comm, prev: B ? B.comm : 0, delta: d(A.comm, B.comm), fmt: 'num' },
-    { metric: 'Average Price (AOV):', curr: A.sold ? A.gmv / A.sold : 0, prev: B ? (B.sold ? B.gmv / B.sold : 0) : 0, delta: d(A.sold ? A.gmv / A.sold : 0, B ? (B.sold ? B.gmv / B.sold : 0) : 0), fmt: 'currency' },
-    { metric: 'Items Sold:', curr: A.sold, prev: B ? B.sold : 0, delta: d(A.sold, B.sold), fmt: 'num' }
+    { metric: 'Total slots:', curr: A.slots, prev: B ? B.slots : 0, delta: D(A.slots, B?.slots), fmt: 'num' },
+    { metric: 'GMV:', curr: A.gmv, prev: B ? B.gmv : 0, delta: D(A.gmv, B && B.gmv), fmt: 'currency' },
+    { metric: 'Average GMV per slot:', curr: A.gmv / A.slots, prev: B ? B.gmv / B.slots : 0, delta: D(A.gmv / A.slots, B ? B.gmv / B.slots : 0), fmt: 'currency' },
+    { metric: 'New Followers:', curr: A.fol, prev: B ? B.fol : 0, delta: D(A.fol, B && B.fol), fmt: 'num' },
+    { metric: 'Average LIVE CTR:', curr: A.live, prev: B ? B.live : 0, delta: D(A.live, B && B.live), fmt: 'pct' },
+    { metric: 'Average CTOR:', curr: A.ctor, prev: B ? B.ctor : 0, delta: D(A.ctor, B && B.ctor), fmt: 'pct' },
+    { metric: 'Total Views:', curr: A.views, prev: B ? B.views : 0, delta: D(A.views, B && B.views), fmt: 'num' },
+    { metric: 'Total Product Clicks:', curr: A.click, prev: B ? B.click : 0, delta: D(A.click, B && B.click), fmt: 'num' },
+    { metric: 'Total Comments:', curr: A.comm, prev: B ? B.comm : 0, delta: D(A.comm, B && B.comm), fmt: 'num' },
+    { metric: 'Average Price (AOV):', curr: A.sold ? A.gmv / A.sold : 0, prev: B ? (B.sold ? B.gmv / B.sold : 0) : 0, delta: D(A.sold ? A.gmv / A.sold : 0, B && (B.sold ? B.gmv / B.sold : 0)), fmt: 'currency' },
+    { metric: 'Items Sold:', curr: A.sold, prev: B ? B.sold : 0, delta: D(A.sold, B && B.sold), fmt: 'num' }
   ];
 
   // Hosts: explicit Host Name column (fallback: suffix after "x " in title)
