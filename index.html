@@ -253,6 +253,11 @@ function formatVal(val, fmt) {
   return val;
 }
 
+// KPI lookup by metric name — robust to row reordering
+function metricRow(report, name) { return (report.overall || []).find(r => r.metric === name); }
+function metricVal(report, name) { const m = metricRow(report, name); return m ? m.curr : null; }
+function metricDelta(report, name) { const m = metricRow(report, name); return m ? m.delta : null; }
+
 function renderDelta(d) {
   if (d === undefined || d === null) return '-';
   const isPos = d >= 0;
@@ -508,23 +513,23 @@ async function loadAccountReport() {
     <div class="kpi-row">
       <div class="kpi-card">
         <div class="kpi-lbl">Total GMV</div>
-        <div class="kpi-num mono">${formatVal(report.overall[1].curr, 'currency')}</div>
-        ${renderDelta(report.overall[1].delta)}
+        <div class="kpi-num mono">${formatVal(metricVal(report, 'GMV:'), 'currency')}</div>
+        ${renderDelta(metricDelta(report, 'GMV:'))}
       </div>
       <div class="kpi-card">
         <div class="kpi-lbl">Total Slots</div>
-        <div class="kpi-num mono">${formatVal(report.overall[0].curr, 'num')}</div>
-        ${renderDelta(report.overall[0].delta)}
+        <div class="kpi-num mono">${formatVal(metricVal(report, 'Total Slots:'), 'num')}</div>
+        ${renderDelta(metricDelta(report, 'Total Slots:'))}
       </div>
       <div class="kpi-card">
         <div class="kpi-lbl">Total Views</div>
-        <div class="kpi-num mono">${formatVal(report.overall[6].curr, 'num')}</div>
-        ${renderDelta(report.overall[6].delta)}
+        <div class="kpi-num mono">${formatVal(metricVal(report, 'Total Views:'), 'num')}</div>
+        ${renderDelta(metricDelta(report, 'Total Views:'))}
       </div>
       <div class="kpi-card">
         <div class="kpi-lbl">Items Sold</div>
-        <div class="kpi-num mono">${formatVal(report.overall[10].curr, 'num')}</div>
-        ${renderDelta(report.overall[10].delta)}
+        <div class="kpi-num mono">${formatVal(metricVal(report, 'Items Sold:'), 'num')}</div>
+        ${renderDelta(metricDelta(report, 'Items Sold:'))}
       </div>
     </div>
 
