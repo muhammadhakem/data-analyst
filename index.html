@@ -349,8 +349,10 @@ async function liveReport() {
     { metric: 'Items Sold:', curr: A.sold, prev: B ? B.sold : 0, delta: d(A.sold, B.sold), fmt: 'num' }
   ];
 
-  // Hosts: host name = suffix after "x " or "with " in title
+  // Hosts: explicit Host Name column (fallback: suffix after "x " in title)
   const hostOf = (r) => {
+    const hn = String(get(r, 'Host Name') || '').trim();
+    if (hn) return hn;
     const t = String(get(r, 'Livestream Title') || '');
     const m = t.match(/[xX]\s*([A-Za-z]+)\s*!*\s*$/);
     return m ? m[1] : null;
