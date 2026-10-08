@@ -249,6 +249,7 @@ function formatVal(val, fmt) {
   if (isNaN(num)) return val;
   if (fmt === 'currency') return 'RM ' + num.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (fmt === 'num') return num.toLocaleString('en-MY');
+  if (fmt === 'pct') return num.toFixed(2) + '%';
   return val;
 }
 
@@ -346,13 +347,11 @@ async function liveReport() {
   const B = prevM ? agg(pick(prevM)) : null;
   const D = (a, b) => (a == null || b == null) ? null : (((a - b) / b) * 100);
   const overall = [
-    { metric: 'Total slots: (Hours/3)', curr: A.slotEquiv, prev: B ? B.slotEquiv : 0, delta: D(A.slotEquiv, B?.slotEquiv), fmt: 'num' },
-    { metric: 'Total Hours:', curr: A.hours, prev: B ? B.hours : 0, delta: D(A.hours, B?.hours), fmt: 'num' },
-    { metric: 'Live Session (Slots):', curr: A.slots, prev: B ? B.slots : 0, delta: D(A.slots, B?.slots), fmt: 'num' },
+    { metric: 'Total Slots:', curr: A.slotEquiv, prev: B ? B.slotEquiv : 0, delta: D(A.slotEquiv, B?.slotEquiv), fmt: 'num' },
     { metric: 'GMV:', curr: A.gmv, prev: B ? B.gmv : 0, delta: D(A.gmv, B && B.gmv), fmt: 'currency' },
     { metric: 'Average GMV per slot:', curr: A.gmv / A.slotEquiv, prev: B ? B.gmv / B.slotEquiv : 0, delta: D(A.gmv / A.slotEquiv, B ? B.gmv / B.slotEquiv : 0), fmt: 'currency' },
     { metric: 'New Followers:', curr: A.fol, prev: B ? B.fol : 0, delta: D(A.fol, B && B.fol), fmt: 'num' },
-    { metric: 'Average CTR:', curr: +(A.ctr||0).toFixed(2), prev: B ? +(B.ctr||0).toFixed(2) : 0, delta: D(A.ctr, B && B.ctr), fmt: 'pct' },
+    { metric: 'Average CTR:', curr: +(A.live||0).toFixed(2), prev: B ? +(B.live||0).toFixed(2) : 0, delta: D(A.live, B && B.live), fmt: 'pct' },
     { metric: 'Average CTOR:', curr: +(A.ctor||0).toFixed(2), prev: B ? +(B.ctor||0).toFixed(2) : 0, delta: D(A.ctor, B && B.ctor), fmt: 'pct' },
     { metric: 'Total Views:', curr: A.views, prev: B ? B.views : 0, delta: D(A.views, B && B.views), fmt: 'num' },
     { metric: 'Total Product Clicks:', curr: A.click, prev: B ? B.click : 0, delta: D(A.click, B && B.click), fmt: 'num' },
