@@ -293,7 +293,7 @@ function toggleSidebar() {
 }
 
 async function liveReport() {
-  const res = await fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(activeAccount.spreadsheetId)}&sheet=${encodeURIComponent(activeAccount.sheetName)}`);
+  const res = await fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(activeAccount.spreadsheetId)}&sheet=${encodeURIComponent(activeAccount.sheetName)}&t=${Date.now()}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || 'fetch failed');
 
@@ -574,9 +574,9 @@ async function loadAccountReport() {
     <div class="card-block" style="margin-top:24px;padding:24px">
       <h2 class="section-title">🎯 Key Performance Insights & Takeaways</h2>
       <div style="font-size:13.5px;line-height:1.7;color:var(--text-muted)">
-        <p>• <b>Morning session</b> recorded the highest Average GMV per slot at <b>RM 2,107.25</b> across 30 broadcast sessions.</p>
-        <p style="margin-top:8px">• <b>Noon slot</b> maintained steady performance at <b>RM 2,004.57</b> avg GMV.</p>
-        <p style="margin-top:8px">• Top performing host <b>${report.hosts[0]?.host || 'Leader'}</b> achieved outstanding results with <b>${report.hosts[0]?.ctor || ''} CTOR</b>.</p>
+        <p>• <b>Morning session</b> recorded the highest Average GMV per slot at <b>${report.timeSlots[0]?.avgGmv ? 'RM ' + report.timeSlots[0].avgGmv.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</b> across <b>${report.timeSlots[0]?.slots || 0}</b> broadcast sessions.</p>
+        <p style="margin-top:8px">• <b>Noon slot</b> maintained steady performance at <b>${report.timeSlots[1]?.avgGmv ? 'RM ' + report.timeSlots[1].avgGmv.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</b> avg GMV.</p>
+        <p style="margin-top:8px">• Top performing host <b>${report.hosts[0]?.host || 'Leader'}</b> generated <b>${report.hosts[0]?.gmv ? 'RM ' + report.hosts[0].gmv.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</b> across <b>${report.hosts[0]?.slots || 0}</b> slots with outstanding <b>${report.hosts[0]?.ctor || ''}</b> CTOR.</p>
       </div>
     </div>
   `;
@@ -586,6 +586,8 @@ async function loadAccountReport() {
 
 renderNav();
 loadAccountReport();
+// Auto-refresh every 30s → sheet updates reflect without manual click
+setInterval(loadAccountReport, 30000);
 </script>
 </body>
 </html>
