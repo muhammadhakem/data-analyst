@@ -191,8 +191,8 @@ const ACCOUNTS = [
     brand: 'Corolla',
     platform: 'TikTok',
     label: 'Corolla (TikTok)',
-    spreadsheetId: '',
-    sheetName: 'September 2026',
+    spreadsheetId: '1Yo7q3pMs_fo5bpnEtgcgOkbmLzVYA4O9A40nIOf3N68',
+    sheetName: 'Raw Data',
     fallbackData: {
       title: '(COROLLA) TIKTOK LIVESTREAM REPORT',
       date: '1 October 2026',
@@ -292,12 +292,130 @@ function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
 }
 
+async function liveReport() {
+  const res = await fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(activeAccount.spreadsheetId)}&sheet=${encodeURIComponent(activeAccount.sheetName)}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'fetch failed');
+
+  const rows = data.rows.map(r => ({ c: r }));
+  if (!rows.length) return null;
+
+  // Column index map from header row
+  const H = data.cols;
+  const I = {};
+  H.forEach((c, i) => I[c] = i);
+  const get = (r, k) => { const i = I[k]; return (i !== undefined && i < r.length) ? r[i] : ''; };
+  const num = (v) => { const s = String(v ?? '').replace(/[^0-9.\-]/g, ''); return s ? parseFloat(s) : 0; };
+  const mon = (r) => String(get(r, 'Start time')).slice(0, 7);
+  const cur = (v) => 'RM ' + num(v).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Overall: latest month vs previous month
+  const months = [...new Set(rows.map(r => mon(r)))].filter(Boolean).sort();
+  const curM = months[months.length - 1];
+  const prevM = months[months.length - 2] || null;
+  const pick = (m) => rows.filter(r => mon(r) === m);
+  const agg = (M) => {
+    const n = M.length;
+    const s = (k) => M.reduce((a, r) => a + num(get(r, k)), 0);
+    const avg = (k) => { const v = M.map(r => num(get(r, k))).filter(x => x > 0); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    return {
+      slots: n,
+      gmv: s('Attributed GMV'),
+      views: s('Views'),
+      click: s('Product clicks'),
+      comm: s('Comments'),
+      sold: s('Attributed items sold'),
+      fol: s('New followers'),
+      ctr: avg('CTR'),
+      ctor: avg('CTOR'),
+      live: avg('LIVE CTR'),
+      tt: avg('Tap through rate')
+    };
+  };
+  const A = agg(pick(curM));
+  const B = prevM ? agg(pick(prevM)) : null;
+  const d = (a, b) => b ? (((a - b) / b) * 100) : 0;
+  const overall = [
+    { metric: 'Total slots:', curr: A.slots, prev: B ? B.slots : 0, delta: d(A.slots, B.slots), fmt: 'num' },
+    { metric: 'GMV:', curr: A.gmv, prev: B ? B.gmv : 0, delta: d(A.gmv, B.gmv), fmt: 'currency' },
+    { metric: 'Average GMV per slot:', curr: A.gmv / A.slots, prev: B ? B.gmv / B.slots : 0, delta: d(A.gmv / A.slots, B ? B.gmv / B.slots : 0), fmt: 'currency' },
+    { metric: 'New Followers:', curr: A.fol, prev: B ? B.fol : 0, delta: d(A.fol, B.fol), fmt: 'num' },
+    { metric: 'Average LIVE CTR:', curr: A.live, prev: B ? B.live : 0, delta: d(A.live, B.live), fmt: 'pct' },
+    { metric: 'Average CTOR:', curr: A.ctor, prev: B ? B.ctor : 0, delta: d(A.ctor, B.ctor), fmt: 'pct' },
+    { metric: 'Total Views:', curr: A.views, prev: B ? B.views : 0, delta: d(A.views, B.views), fmt: 'num' },
+    { metric: 'Total Product Clicks:', curr: A.click, prev: B ? B.click : 0, delta: d(A.click, B.click), fmt: 'num' },
+    { metric: 'Total Comments:', curr: A.comm, prev: B ? B.comm : 0, delta: d(A.comm, B.comm), fmt: 'num' },
+    { metric: 'Average Price (AOV):', curr: A.sold ? A.gmv / A.sold : 0, prev: B ? (B.sold ? B.gmv / B.sold : 0) : 0, delta: d(A.sold ? A.gmv / A.sold : 0, B ? (B.sold ? B.gmv / B.sold : 0) : 0), fmt: 'currency' },
+    { metric: 'Items Sold:', curr: A.sold, prev: B ? B.sold : 0, delta: d(A.sold, B.sold), fmt: 'num' }
+  ];
+
+  // Hosts: host name = suffix after "x " or "with " in title
+  const hostOf = (r) => {
+    const t = String(get(r, 'Livestream Title') || '');
+    const m = t.match(/[xX]\s*([A-Za-z]+)\s*!*\s*$/);
+    return m ? m[1] : null;
+  };
+  const hMap = {};
+  pick(curM).forEach(r => {
+    const h = hostOf(r); if (!h) return;
+    hMap[h] = hMap[h] || { host: h, gmv: 0, slots: 0, ctr: [], ctor: [], view: [] };
+    const o = hMap[h];
+    o.gmv += num(get(r, 'Attributed GMV'));
+    o.slots++;
+    const ctr = num(get(r, 'CTR')); if (ctr > 0) o.ctr.push(ctr);
+    const ctor = num(get(r, 'CTOR')); if (ctor > 0) o.ctor.push(ctor);
+    const vt = num(get(r, 'Avg. viewing duration per view')); if (vt > 0) o.view.push(vt);
+  });
+  const hosts = Object.values(hMap).map(o => ({
+    host: o.host,
+    gmv: o.gmv,
+    slots: o.slots,
+    avgGmv: o.gmv / o.slots,
+    ctr: (o.ctr.reduce((a, b) => a + b, 0) / (o.ctr.length || 1)).toFixed(2) + '%',
+    ctor: (o.ctor.reduce((a, b) => a + b, 0) / (o.ctor.length || 1)).toFixed(2) + '%',
+    avgViewTime: (o.view.reduce((a, b) => a + b, 0) / (o.view.length || 1)).toFixed(1) + 's'
+  })).sort((x, y) => y.avgGmv - x.avgGmv);
+
+  // Time slots from start hour
+  const bucket = (h) => h < 12 ? 'Morning' : h < 14 ? 'Noon' : h < 18 ? 'Evening' : 'Night';
+  const tMap = {};
+  pick(curM).forEach(r => {
+    const t = bucket(parseInt(String(get(r, 'Start time')).slice(11, 13), 10));
+    tMap[t] = tMap[t] || { gmv: 0, slots: 0 };
+    tMap[t].gmv += num(get(r, 'Attributed GMV'));
+    tMap[t].slots++;
+  });
+  const timeSlots = Object.entries(tMap).map(([k, v]) => ({
+    slot: k, gmv: v.gmv, avgGmv: v.gmv / v.slots, slots: v.slots
+  })).sort((a, b) => b.avgGmv - a.avgGmv);
+
+  const ymd = (d) => d.toISOString().slice(0, 10);
+  const pretty = (m) => { const [y, mo] = m.split('-'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mo-1]} ${y}`; };
+
+  return {
+    title: '(COROLLA) TIKTOK LIVESTREAM REPORT',
+    date: ymd(new Date()),
+    preparedBy: 'Akiem',
+    currentMonthLabel: `Current Month (${pretty(curM)})`,
+    prevMonthLabel: prevM ? `Previous Month (${pretty(prevM)})` : `—`,
+    overall, hosts, timeSlots
+  };
+}
+
 async function loadAccountReport() {
   const btn = document.getElementById('refresh-btn');
   btn.disabled = true;
   const container = document.getElementById('report-view-container');
 
   let report = activeAccount.fallbackData;
+  try {
+    if (activeAccount.spreadsheetId) {
+      const data = await liveReport();
+      if (data) report = data;
+    }
+  } catch (e) {
+    console.warn('Live fetch failed, using fallback', e);
+  }
 
   container.innerHTML = `
     <!-- Top Metadata Card -->
