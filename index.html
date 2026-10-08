@@ -181,6 +181,9 @@ table.report-table tbody td{padding:12px 18px;vertical-align:middle;white-space:
     <div class="top-left">
       <button class="menu-btn" id="menu-btn" onclick="toggleSidebar()">☰</button>
       <div class="report-badge" id="report-source-badge">⚡ Live GSheet Direct</div>
+      <select id="month-filter" onchange="onMonthChange(this.value)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:600;background:var(--surface);color:var(--text-main)">
+        <option value="">All Months</option>
+      </select>
     </div>
     <button type="button" class="refresh-btn" id="refresh-btn">
       <span class="spin"></span><span>↻</span> Refresh
@@ -251,6 +254,7 @@ const ACCOUNTS = [
 
 let activeAccount = ACCOUNTS[0];
 let lastSig = ''; // dirty-check signature
+let selMonth = ''; // filter: bulan terpilih (YYYY-MM), '' = latest
 
 function formatVal(val, fmt) {
   if (val === null || val === undefined || val === '') return '-';
@@ -340,10 +344,10 @@ async function liveReport(force) {
   const mon = (r) => String(get(r, 'Start time')).slice(0, 7);
   const cur = (v) => 'RM ' + num(v).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  // Overall: latest month vs previous month
+  // Overall: selected month vs previous month (from months present in data)
   const months = [...new Set(rows.map(r => mon(r)))].filter(Boolean).sort();
-  const curM = months[months.length - 1];
-  const prevM = months[months.length - 2] || null;
+  const curM = (selMonth && months.includes(selMonth)) ? selMonth : months[months.length - 1];
+  const prevM = months[months.indexOf(curM) - 1] || null;
   const pick = (m) => rows.filter(r => mon(r) === m);
   const agg = (M) => {
     const n = M.length;
@@ -458,6 +462,7 @@ async function liveReport(force) {
     preparedBy: 'Akiem',
     currentMonthLabel: `Current Month (${pretty(curM)})`,
     prevMonthLabel: prevM ? `Previous Month (${pretty(prevM)})` : `—`,
+    months,        // senarai bulan untuk dropdown
     overall, hosts, timeSlots
   };
 }
@@ -506,6 +511,29 @@ function sortTime(v) {
 }
 
 let hostCache = [], timeCache = [];
+
+function onMonthChange(v) {
+  selMonth = v || '';
+  // force reload dari bulan terpilih; previous month reflect automatically
+  loadAccountReport(true);
+}
+
+function populateMonths(months) {
+  const sel = document.getElementById('month-filter');
+  if (!sel || !months || !months.length) return;
+  // populate sekali sahaja (kekal pilihan user)
+  if (sel.dataset.built) return;
+  sel.dataset.built = '1';
+  const fmt = (m) => { const [y, mo] = m.split('-'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mo-1]} ${y}`; };
+  // dari terbaru ke lama
+  [...months].reverse().forEach(m => {
+    const o = document.createElement('option');
+    o.value = m;
+    o.textContent = fmt(m);
+    sel.appendChild(o);
+  });
+  if (selMonth) sel.value = selMonth;
+}
 
 async function loadAccountReport(force) {
   const btn = document.getElementById('refresh-btn');
@@ -676,6 +704,7 @@ async function loadAccountReport(force) {
 
   hostCache = report.hosts || [];
   timeCache = report.timeSlots || [];
+  populateMonths(report.months);
   sortHosts(hostSort);
   sortTime(timeSort);
 
