@@ -547,30 +547,6 @@ async function loadAccountReport(force) {
       </div>
     </div>
 
-    <!-- Quick KPI Summary Cards -->
-    <div class="kpi-row">
-      <div class="kpi-card">
-        <div class="kpi-lbl">Total GMV</div>
-        <div class="kpi-num mono">${formatVal(metricVal(report, 'GMV:'), 'currency')}</div>
-        ${renderDelta(metricDelta(report, 'GMV:'))}
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-lbl">Total Slots</div>
-        <div class="kpi-num mono">${formatVal(metricVal(report, 'Total Slots:'), 'num')}</div>
-        ${renderDelta(metricDelta(report, 'Total Slots:'))}
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-lbl">Total Views</div>
-        <div class="kpi-num mono">${formatVal(metricVal(report, 'Total Views:'), 'num')}</div>
-        ${renderDelta(metricDelta(report, 'Total Views:'))}
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-lbl">Items Sold</div>
-        <div class="kpi-num mono">${formatVal(metricVal(report, 'Items Sold:'), 'num')}</div>
-        ${renderDelta(metricDelta(report, 'Items Sold:'))}
-      </div>
-    </div>
-
     <!-- Overall Performance Comparison Table -->
     <div class="card-block">
       <div style="padding:18px 22px;border-bottom:1px solid var(--border)">
