@@ -105,6 +105,9 @@ body{display:flex}
 .kpi-delta{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px}
 .delta-pos{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
 .delta-neg{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.mini-delta{display:inline-block;font-size:10px;font-weight:700;margin-left:5px;padding:1px 4px;border-radius:4px;line-height:1.2}
+.mini-delta.delta-pos{background:transparent;color:var(--green);border:none}
+.mini-delta.delta-neg{background:transparent;color:var(--red);border:none}
 
 /* Section Layouts */
 .section-title{
@@ -266,6 +269,15 @@ function renderDelta(d) {
   return `<span class="kpi-delta mono ${cls}">${arrow} ${Math.abs(d).toFixed(2)}%</span>`;
 }
 
+// small inline arrow for table cells
+function miniDelta(d) {
+  if (d === null || d === undefined) return '';
+  const isPos = d >= 0;
+  const cls = isPos ? 'delta-pos' : 'delta-neg';
+  const arrow = isPos ? '▲' : '▼';
+  return `<span class="mini-delta mono ${cls}">${arrow}${Math.abs(d).toFixed(1)}%</span>`;
+}
+
 function renderNav() {
   const container = document.getElementById('account-nav-list');
   // Group by brand
@@ -366,45 +378,70 @@ async function liveReport() {
   ];
 
   // Hosts: explicit Host Name column (fallback: suffix after "x " in title)
-  const hostOf = (r) => {
-    const hn = String(get(r, 'Host Name') || '').trim();
-    return hn || null;
+  const hostOf = (r) => String(get(r, 'Host Name') || '').trim() || null;
+  const buildHosts = (M) => {
+    const hMap = {};
+    M.forEach(r => {
+      const h = hostOf(r); if (!h) return;
+      const gmv = num(get(r, 'Attributed GMV'));
+      if (gmv < 100) return;  // buang test/leftover minit sessions
+      const key = h.toLowerCase();  // merge QYS/Qys → satu
+      const o = hMap[key] = hMap[key] || { host: h, gmv: 0, slots: 0, ctr: [], ctor: [], view: [] };
+      o.gmv += gmv;
+      o.slots++;
+      const ctr = num(get(r, 'LIVE CTR')); if (ctr > 0) o.ctr.push(ctr);
+      const ctor = num(get(r, 'CTOR')); if (ctor > 0) o.ctor.push(ctor);
+      const vt = num(get(r, 'Avg. viewing duration per view')); if (vt > 0) o.view.push(vt);
+    });
+    return Object.values(hMap).map(o => ({
+      key: o.host.toLowerCase(),
+      host: o.host,
+      gmv: o.gmv,
+      slots: o.slots,
+      avgGmv: o.gmv / o.slots,
+      ctrNum: o.ctr.length ? o.ctr.reduce((a, b) => a + b, 0) / o.ctr.length : null,
+      ctorNum: o.ctor.length ? o.ctor.reduce((a, b) => a + b, 0) / o.ctor.length : null,
+      viewTime: o.view.length ? o.view.reduce((a, b) => a + b, 0) / o.view.length : null
+    }));
   };
-  const hMap = {};
-  pick(curM).forEach(r => {
-    const h = hostOf(r); if (!h) return;
-    const gmv = num(get(r, 'Attributed GMV'));
-    if (gmv < 100) return;  // buang test/leftover minit sessions (sepadan 122 slots report)
-    const key = h.toLowerCase();  // merge QYS/Qys → satu
-    const o = hMap[key] = hMap[key] || { host: h, gmv: 0, slots: 0, ctr: [], ctor: [], view: [] };
-    o.gmv += gmv;
-    o.slots++;
-    const ctr = num(get(r, 'LIVE CTR')); if (ctr > 0) o.ctr.push(ctr);
-    const ctor = num(get(r, 'CTOR')); if (ctor > 0) o.ctor.push(ctor);
-    const vt = num(get(r, 'Avg. viewing duration per view')); if (vt > 0) o.view.push(vt);
-  });
-  const hosts = Object.values(hMap).map(o => ({
-    host: o.host,
-    gmv: o.gmv,
-    slots: o.slots,
-    avgGmv: o.gmv / o.slots,
-    ctrNum: o.ctr.length ? o.ctr.reduce((a, b) => a + b, 0) / o.ctr.length : null,
-    ctorNum: o.ctor.length ? o.ctor.reduce((a, b) => a + b, 0) / o.ctor.length : null,
-    avgViewTime: (o.view.reduce((a, b) => a + b, 0) / (o.view.length || 1)).toFixed(1) + 's'
-  })).sort((x, y) => y.avgGmv - x.avgGmv);
+  const hostsCur = buildHosts(pick(curM));
+  const hostsPrev = prevM ? buildHosts(pick(prevM)) : [];
+  const prevHost = {};
+  hostsPrev.forEach(h => prevHost[h.key] = h);
+  const pct = (a, b) => (a == null || b == null || b === 0) ? null : ((a - b) / b) * 100;
+  const hosts = hostsCur.map(h => {
+    const p = prevHost[h.key] || {};
+    return {
+      ...h,
+      avgViewTime: (h.viewTime ?? 0).toFixed(1) + 's',
+      dGmv: pct(h.gmv, p.gmv),
+      dAvgGmv: pct(h.avgGmv, p.avgGmv),
+      dCtr: pct(h.ctrNum, p.ctrNum),
+      dCtor: pct(h.ctorNum, p.ctorNum),
+      dView: pct(h.viewTime, p.viewTime)
+    };
+  }).sort((x, y) => y.avgGmv - x.avgGmv);
 
   // Time slots from start hour
   const bucket = (h) => h < 12 ? 'Morning' : h < 14 ? 'Noon' : h < 18 ? 'Evening' : 'Night';
-  const tMap = {};
-  pick(curM).forEach(r => {
-    const t = bucket(parseInt(String(get(r, 'Start time')).slice(11, 13), 10));
-    tMap[t] = tMap[t] || { gmv: 0, slots: 0 };
-    tMap[t].gmv += num(get(r, 'Attributed GMV'));
-    tMap[t].slots++;
-  });
-  const timeSlots = Object.entries(tMap).map(([k, v]) => ({
-    slot: k, gmv: v.gmv, avgGmv: v.gmv / v.slots, slots: v.slots
-  })).sort((a, b) => b.avgGmv - a.avgGmv);
+  const buildSlots = (M) => {
+    const tMap = {};
+    M.forEach(r => {
+      const t = bucket(parseInt(String(get(r, 'Start time')).slice(11, 13), 10));
+      tMap[t] = tMap[t] || { gmv: 0, slots: 0 };
+      tMap[t].gmv += num(get(r, 'Attributed GMV'));
+      tMap[t].slots++;
+    });
+    return Object.entries(tMap).map(([k, v]) => ({ slot: k, gmv: v.gmv, avgGmv: v.gmv / v.slots, slots: v.slots }));
+  };
+  const slotsCur = buildSlots(pick(curM));
+  const slotsPrev = prevM ? buildSlots(pick(prevM)) : [];
+  const prevSlot = {};
+  slotsPrev.forEach(s => prevSlot[s.slot] = s);
+  const timeSlots = slotsCur.map(t => {
+    const p = prevSlot[t.slot] || {};
+    return { ...t, dGmv: pct(t.gmv, p.gmv), dAvgGmv: pct(t.avgGmv, p.avgGmv) };
+  }).sort((a, b) => b.avgGmv - a.avgGmv);
 
   const ymd = (d) => d.toISOString().slice(0, 10);
   const pretty = (m) => { const [y, mo] = m.split('-'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mo-1]} ${y}`; };
@@ -435,12 +472,12 @@ function sortHosts(v) {
       <tr>
         <td><span class="rank-badge ${rankCls}">${idx + 1}</span></td>
         <td style="font-weight:700">${h.host}</td>
-        <td class="mono" style="font-weight:700">${formatVal(h.gmv, 'currency')}</td>
+        <td class="mono" style="font-weight:700">${formatVal(h.gmv, 'currency')}${miniDelta(h.dGmv)}</td>
         <td class="mono">${h.slots}</td>
-        <td class="mono" style="font-weight:600">${formatVal(h.avgGmv, 'currency')}</td>
-        <td class="mono">${(h.ctrNum == null ? '' : h.ctrNum.toFixed(2) + '%')}</td>
-        <td class="mono">${(h.ctorNum == null ? '' : h.ctorNum.toFixed(2) + '%')}</td>
-        <td class="mono">${h.avgViewTime}</td>
+        <td class="mono" style="font-weight:600">${formatVal(h.avgGmv, 'currency')}${miniDelta(h.dAvgGmv)}</td>
+        <td class="mono">${h.ctrNum == null ? '—' : h.ctrNum.toFixed(2) + '%'}${miniDelta(h.dCtr)}</td>
+        <td class="mono">${h.ctorNum == null ? '—' : h.ctorNum.toFixed(2) + '%'}${miniDelta(h.dCtor)}</td>
+        <td class="mono">${h.avgViewTime || h.avgViewTime}${miniDelta(h.dView)}</td>
       </tr>
     `;
   }).join('');
@@ -455,8 +492,8 @@ function sortTime(v) {
   tbody.innerHTML = items.map(t => `
     <tr>
       <td style="font-weight:700">${t.slot}</td>
-      <td class="mono" style="font-weight:700">${formatVal(t.gmv, 'currency')}</td>
-      <td class="mono">${formatVal(t.avgGmv, 'currency')}</td>
+      <td class="mono" style="font-weight:700">${formatVal(t.gmv, 'currency')}${miniDelta(t.dGmv)}</td>
+      <td class="mono">${formatVal(t.avgGmv, 'currency')}${miniDelta(t.dAvgGmv)}</td>
       <td class="mono">${t.slots}</td>
     </tr>
   `).join('');
@@ -466,20 +503,22 @@ let hostCache = [], timeCache = [];
 
 async function loadAccountReport() {
   const btn = document.getElementById('refresh-btn');
-  btn.disabled = true;
   const container = document.getElementById('report-view-container');
 
   let report = activeAccount.fallbackData;
+  let changed = true;
   try {
     if (activeAccount.spreadsheetId) {
       const live = await liveReport();
-      if (live === 'unchanged') { btn.disabled = false; return; } // data sama, skip render
+      if (live === 'unchanged') { changed = false; return; } // data sama, skip render — button sentuh tak
       if (live) report = live;
     }
   } catch (e) {
     console.warn('Live fetch failed, using fallback', e);
   }
+  if (!changed) return;
 
+  btn.classList.add('loading');
   container.innerHTML = `
     <!-- Top Metadata Card -->
     <div class="report-header">
@@ -593,12 +632,12 @@ async function loadAccountReport() {
                 <tr>
                   <td><span class="rank-badge ${rankCls}">${idx + 1}</span></td>
                   <td style="font-weight:700">${h.host}</td>
-                  <td class="mono" style="font-weight:700">${formatVal(h.gmv, 'currency')}</td>
+                  <td class="mono" style="font-weight:700">${formatVal(h.gmv, 'currency')}${miniDelta(h.dGmv)}</td>
                   <td class="mono">${h.slots}</td>
-                  <td class="mono" style="font-weight:600">${formatVal(h.avgGmv, 'currency')}</td>
-                  <td class="mono">${h.ctrNum == null ? '—' : h.ctrNum.toFixed(2) + '%'}</td>
-                  <td class="mono">${h.ctorNum == null ? '—' : h.ctorNum.toFixed(2) + '%'}</td>
-                  <td class="mono">${h.avgViewTime}</td>
+                  <td class="mono" style="font-weight:600">${formatVal(h.avgGmv, 'currency')}${miniDelta(h.dAvgGmv)}</td>
+                  <td class="mono">${h.ctrNum == null ? '—' : h.ctrNum.toFixed(2) + '%'}${miniDelta(h.dCtr)}</td>
+                  <td class="mono">${h.ctorNum == null ? '—' : h.ctorNum.toFixed(2) + '%'}${miniDelta(h.dCtor)}</td>
+                  <td class="mono">${h.avgViewTime || h.avgViewTime}${miniDelta(h.dView)}</td>
                 </tr>
               `;
             }).join('')}
@@ -632,8 +671,8 @@ async function loadAccountReport() {
             ${report.timeSlots.map(t => `
               <tr>
                 <td style="font-weight:700">${t.slot}</td>
-                <td class="mono" style="font-weight:700">${formatVal(t.gmv, 'currency')}</td>
-                <td class="mono">${formatVal(t.avgGmv, 'currency')}</td>
+                <td class="mono" style="font-weight:700">${formatVal(t.gmv, 'currency')}${miniDelta(t.dGmv)}</td>
+                <td class="mono">${formatVal(t.avgGmv, 'currency')}${miniDelta(t.dAvgGmv)}</td>
                 <td class="mono">${t.slots}</td>
               </tr>
             `).join('')}
@@ -656,6 +695,7 @@ async function loadAccountReport() {
   hostCache = report.hosts || [];
   timeCache = report.timeSlots || [];
 
+  btn.classList.remove('loading');
   btn.disabled = false;
 }
 
