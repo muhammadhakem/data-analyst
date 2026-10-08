@@ -368,19 +368,18 @@ async function liveReport() {
   // Hosts: explicit Host Name column (fallback: suffix after "x " in title)
   const hostOf = (r) => {
     const hn = String(get(r, 'Host Name') || '').trim();
-    if (hn) return hn;
-    const t = String(get(r, 'Livestream Title') || '');
-    const m = t.match(/[xX]\s*([A-Za-z]+)\s*!*\s*$/);
-    return m ? m[1] : null;
+    return hn || null;
   };
   const hMap = {};
   pick(curM).forEach(r => {
     const h = hostOf(r); if (!h) return;
-    hMap[h] = hMap[h] || { host: h, gmv: 0, slots: 0, ctr: [], ctor: [], view: [] };
-    const o = hMap[h];
-    o.gmv += num(get(r, 'Attributed GMV'));
+    const gmv = num(get(r, 'Attributed GMV'));
+    if (gmv < 100) return;  // buang test/leftover minit sessions (sepadan 122 slots report)
+    const key = h.toLowerCase();  // merge QYS/Qys → satu
+    const o = hMap[key] = hMap[key] || { host: h, gmv: 0, slots: 0, ctr: [], ctor: [], view: [] };
+    o.gmv += gmv;
     o.slots++;
-    const ctr = num(get(r, 'CTR')); if (ctr > 0) o.ctr.push(ctr);
+    const ctr = num(get(r, 'LIVE CTR')); if (ctr > 0) o.ctr.push(ctr);
     const ctor = num(get(r, 'CTOR')); if (ctor > 0) o.ctor.push(ctor);
     const vt = num(get(r, 'Avg. viewing duration per view')); if (vt > 0) o.view.push(vt);
   });
