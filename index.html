@@ -325,8 +325,11 @@ async function liveReport() {
     const n = M.length;
     const s = (k) => M.reduce((a, r) => a + num(get(r, k)), 0);
     const avg = (k) => { const v = M.map(r => num(get(r, k))).filter(x => x > 0); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    const hours = s('Duration\nHours');
     return {
       slots: n,
+      slotEquiv: hours / 3,  // Total Slots = Total Hours/3 (user formula)
+      hours: hours,
       gmv: s('Attributed GMV'),
       views: s('Views'),
       click: s('Product clicks'),
@@ -341,19 +344,20 @@ async function liveReport() {
   };
   const A = agg(pick(curM));
   const B = prevM ? agg(pick(prevM)) : null;
-  // ponytail: d takes optional guard; never deref B.slots before null-check
   const D = (a, b) => (a == null || b == null) ? null : (((a - b) / b) * 100);
   const overall = [
-    { metric: 'Total slots:', curr: A.slots, prev: B ? B.slots : 0, delta: D(A.slots, B?.slots), fmt: 'num' },
+    { metric: 'Total slots: (Hours/3)', curr: A.slotEquiv, prev: B ? B.slotEquiv : 0, delta: D(A.slotEquiv, B?.slotEquiv), fmt: 'num' },
+    { metric: 'Total Hours:', curr: A.hours, prev: B ? B.hours : 0, delta: D(A.hours, B?.hours), fmt: 'num' },
+    { metric: 'Live Session (Slots):', curr: A.slots, prev: B ? B.slots : 0, delta: D(A.slots, B?.slots), fmt: 'num' },
     { metric: 'GMV:', curr: A.gmv, prev: B ? B.gmv : 0, delta: D(A.gmv, B && B.gmv), fmt: 'currency' },
-    { metric: 'Average GMV per slot:', curr: A.gmv / A.slots, prev: B ? B.gmv / B.slots : 0, delta: D(A.gmv / A.slots, B ? B.gmv / B.slots : 0), fmt: 'currency' },
+    { metric: 'Average GMV per slot:', curr: A.gmv / A.slotEquiv, prev: B ? B.gmv / B.slotEquiv : 0, delta: D(A.gmv / A.slotEquiv, B ? B.gmv / B.slotEquiv : 0), fmt: 'currency' },
     { metric: 'New Followers:', curr: A.fol, prev: B ? B.fol : 0, delta: D(A.fol, B && B.fol), fmt: 'num' },
-    { metric: 'Average LIVE CTR:', curr: A.live, prev: B ? B.live : 0, delta: D(A.live, B && B.live), fmt: 'pct' },
-    { metric: 'Average CTOR:', curr: A.ctor, prev: B ? B.ctor : 0, delta: D(A.ctor, B && B.ctor), fmt: 'pct' },
+    { metric: 'Average CTR:', curr: +(A.ctr||0).toFixed(2), prev: B ? +(B.ctr||0).toFixed(2) : 0, delta: D(A.ctr, B && B.ctr), fmt: 'pct' },
+    { metric: 'Average CTOR:', curr: +(A.ctor||0).toFixed(2), prev: B ? +(B.ctor||0).toFixed(2) : 0, delta: D(A.ctor, B && B.ctor), fmt: 'pct' },
     { metric: 'Total Views:', curr: A.views, prev: B ? B.views : 0, delta: D(A.views, B && B.views), fmt: 'num' },
     { metric: 'Total Product Clicks:', curr: A.click, prev: B ? B.click : 0, delta: D(A.click, B && B.click), fmt: 'num' },
     { metric: 'Total Comments:', curr: A.comm, prev: B ? B.comm : 0, delta: D(A.comm, B && B.comm), fmt: 'num' },
-    { metric: 'Average Price (AOV):', curr: A.sold ? A.gmv / A.sold : 0, prev: B ? (B.sold ? B.gmv / B.sold : 0) : 0, delta: D(A.sold ? A.gmv / A.sold : 0, B && (B.sold ? B.gmv / B.sold : 0)), fmt: 'currency' },
+    { metric: 'Average Price:', curr: A.sold ? A.gmv / A.sold : 0, prev: B ? (B.sold ? B.gmv / B.sold : 0) : 0, delta: D(A.sold ? A.gmv / A.sold : 0, B && (B.sold ? B.gmv / B.sold : 0)), fmt: 'currency' },
     { metric: 'Items Sold:', curr: A.sold, prev: B ? B.sold : 0, delta: D(A.sold, B && B.sold), fmt: 'num' }
   ];
 
@@ -381,8 +385,8 @@ async function liveReport() {
     gmv: o.gmv,
     slots: o.slots,
     avgGmv: o.gmv / o.slots,
-    ctr: (o.ctr.reduce((a, b) => a + b, 0) / (o.ctr.length || 1)).toFixed(2) + '%',
-    ctor: (o.ctor.reduce((a, b) => a + b, 0) / (o.ctor.length || 1)).toFixed(2) + '%',
+    ctrNum: o.ctr.length ? o.ctr.reduce((a, b) => a + b, 0) / o.ctr.length : null,
+    ctorNum: o.ctor.length ? o.ctor.reduce((a, b) => a + b, 0) / o.ctor.length : null,
     avgViewTime: (o.view.reduce((a, b) => a + b, 0) / (o.view.length || 1)).toFixed(1) + 's'
   })).sort((x, y) => y.avgGmv - x.avgGmv);
 
@@ -411,6 +415,51 @@ async function liveReport() {
     overall, hosts, timeSlots
   };
 }
+
+// Table sorters (pure client-side, re-render section bodies only)
+let hostSort = 'avgGmv-desc';
+let timeSort = 'gmv-desc';
+
+function sortHosts(v) {
+  hostSort = v;
+  const tbody = document.querySelector('#hosts-tbody');
+  if (!tbody) return;
+  const [key, dir] = v.split('-');
+  const items = [...hostCache].sort((a, b) => dir === 'asc' ? a[key] - b[key] : b[key] - a[key]);
+  tbody.innerHTML = items.map((h, idx) => {
+    const rankCls = idx === 0 ? 'rank-1' : (idx === 1 ? 'rank-2' : (idx === 2 ? 'rank-3' : ''));
+    return `
+      <tr>
+        <td><span class="rank-badge ${rankCls}">${idx + 1}</span></td>
+        <td style="font-weight:700">${h.host}</td>
+        <td class="mono" style="font-weight:700">${formatVal(h.gmv, 'currency')}</td>
+        <td class="mono">${h.slots}</td>
+        <td class="mono" style="font-weight:600">${formatVal(h.avgGmv, 'currency')}</td>
+        <td class="mono">${(h.ctrNum == null ? '' : h.ctrNum.toFixed(2) + '%')}</td>
+        <td class="mono">${(h.ctorNum == null ? '' : h.ctorNum.toFixed(2) + '%')}</td>
+        <td class="mono">${h.avgViewTime}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function sortTime(v) {
+  timeSort = v;
+  const tbody = document.querySelector('#timeslot-tbody');
+  if (!tbody) return;
+  const [key, dir] = v.split('-');
+  const items = [...timeCache].sort((a, b) => dir === 'asc' ? a[key] - b[key] : b[key] - a[key]);
+  tbody.innerHTML = items.map(t => `
+    <tr>
+      <td style="font-weight:700">${t.slot}</td>
+      <td class="mono" style="font-weight:700">${formatVal(t.gmv, 'currency')}</td>
+      <td class="mono">${formatVal(t.avgGmv, 'currency')}</td>
+      <td class="mono">${t.slots}</td>
+    </tr>
+  `).join('');
+}
+
+let hostCache = [], timeCache = [];
 
 async function loadAccountReport() {
   const btn = document.getElementById('refresh-btn');
@@ -509,40 +558,16 @@ async function loadAccountReport() {
       </div>
     </div>
 
-    <!-- Best Time Slots Table -->
-    <div class="card-block">
-      <div style="padding:18px 22px;border-bottom:1px solid var(--border)">
-        <h2 class="section-title">⏰ Best Time Slots</h2>
-      </div>
-      <div class="table-responsive">
-        <table class="report-table">
-          <thead>
-            <tr>
-              <th>Time Slot</th>
-              <th>GMV</th>
-              <th>Average GMV</th>
-              <th>No of Slots</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${report.timeSlots.map(t => `
-              <tr>
-                <td style="font-weight:700">${t.slot}</td>
-                <td class="mono" style="font-weight:700">${formatVal(t.gmv, 'currency')}</td>
-                <td class="mono">${formatVal(t.avgGmv, 'currency')}</td>
-                <td class="mono">${t.slots}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Hosts Performance Table -->
+    <!-- Hosts Performance Ranking (first) -->
     <div class="card-block" style="margin-top:24px">
-      <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px">
         <h2 class="section-title" style="margin-bottom:0">🎙️ Hosts Performance Ranking</h2>
-        <span style="font-size:12px;color:var(--text-muted);font-weight:600">Sorted by Avg. GMV</span>
+        <select onchange="sortHosts(this.value)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:600;background:var(--surface);color:var(--text-main)">
+          <option value="avgGmv-desc">Avg GMV: High→Low</option>
+          <option value="avgGmv-asc">Avg GMV: Low→High</option>
+          <option value="gmv-desc">GMV: High→Low</option>
+          <option value="gmv-asc">GMV: Low→High</option>
+        </select>
       </div>
       <div class="table-responsive">
         <table class="report-table">
@@ -558,7 +583,7 @@ async function loadAccountReport() {
               <th>Avg. View Time</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="hosts-tbody">
             ${report.hosts.map((h, idx) => {
               const rankCls = idx === 0 ? 'rank-1' : (idx === 1 ? 'rank-2' : (idx === 2 ? 'rank-3' : ''));
               return `
@@ -568,12 +593,47 @@ async function loadAccountReport() {
                   <td class="mono" style="font-weight:700">${formatVal(h.gmv, 'currency')}</td>
                   <td class="mono">${h.slots}</td>
                   <td class="mono" style="font-weight:600">${formatVal(h.avgGmv, 'currency')}</td>
-                  <td class="mono">${h.ctr}</td>
-                  <td class="mono">${h.ctor}</td>
+                  <td class="mono">${h.ctrNum == null ? '—' : h.ctrNum.toFixed(2) + '%'}</td>
+                  <td class="mono">${h.ctorNum == null ? '—' : h.ctorNum.toFixed(2) + '%'}</td>
                   <td class="mono">${h.avgViewTime}</td>
                 </tr>
               `;
             }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Best Time Slots Table -->
+    <div class="card-block" style="margin-top:24px">
+      <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <h2 class="section-title" style="margin-bottom:0">⏰ Best Time Slots</h2>
+        <select onchange="sortTime(this.value)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:600;background:var(--surface);color:var(--text-main)">
+          <option value="gmv-desc">GMV: High→Low</option>
+          <option value="gmv-asc">GMV: Low→High</option>
+          <option value="avgGmv-desc">Avg GMV: High→Low</option>
+          <option value="avgGmv-asc">Avg GMV: Low→High</option>
+        </select>
+      </div>
+      <div class="table-responsive">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Time Slot</th>
+              <th>GMV</th>
+              <th>Average GMV</th>
+              <th>No of Slots</th>
+            </tr>
+          </thead>
+          <tbody id="timeslot-tbody">
+            ${report.timeSlots.map(t => `
+              <tr>
+                <td style="font-weight:700">${t.slot}</td>
+                <td class="mono" style="font-weight:700">${formatVal(t.gmv, 'currency')}</td>
+                <td class="mono">${formatVal(t.avgGmv, 'currency')}</td>
+                <td class="mono">${t.slots}</td>
+              </tr>
+            `).join('')}
           </tbody>
         </table>
       </div>
@@ -585,10 +645,13 @@ async function loadAccountReport() {
       <div style="font-size:13.5px;line-height:1.7;color:var(--text-muted)">
         <p>• <b>Morning session</b> recorded the highest Average GMV per slot at <b>${report.timeSlots[0]?.avgGmv ? 'RM ' + report.timeSlots[0].avgGmv.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</b> across <b>${report.timeSlots[0]?.slots || 0}</b> broadcast sessions.</p>
         <p style="margin-top:8px">• <b>Noon slot</b> maintained steady performance at <b>${report.timeSlots[1]?.avgGmv ? 'RM ' + report.timeSlots[1].avgGmv.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</b> avg GMV.</p>
-        <p style="margin-top:8px">• Top performing host <b>${report.hosts[0]?.host || 'Leader'}</b> generated <b>${report.hosts[0]?.gmv ? 'RM ' + report.hosts[0].gmv.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</b> across <b>${report.hosts[0]?.slots || 0}</b> slots with outstanding <b>${report.hosts[0]?.ctor || ''}</b> CTOR.</p>
+        <p style="margin-top:8px">• Top performing host <b>${report.hosts[0]?.host || 'Leader'}</b> generated <b>${report.hosts[0]?.gmv ? 'RM ' + report.hosts[0].gmv.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</b> across <b>${report.hosts[0]?.slots || 0}</b> slots with outstanding <b>${report.hosts[0]?.ctorNum != null ? report.hosts[0].ctorNum.toFixed(2) + '%' : (report.hosts[0]?.ctor || '—')}</b> CTOR.</p>
       </div>
     </div>
   `;
+
+  hostCache = report.hosts || [];
+  timeCache = report.timeSlots || [];
 
   btn.disabled = false;
 }
