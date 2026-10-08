@@ -241,6 +241,7 @@ const ACCOUNTS = [
 
 
 let activeAccount = ACCOUNTS[0];
+let lastSig = ''; // dirty-check signature
 
 function formatVal(val, fmt) {
   if (val === null || val === undefined || val === '') return '-';
@@ -296,6 +297,11 @@ async function liveReport() {
   const res = await fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(activeAccount.spreadsheetId)}&sheet=${encodeURIComponent(activeAccount.sheetName)}&t=${Date.now()}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || 'fetch failed');
+
+  // Dirty-check: render hanya bila data berubah
+  const sig = JSON.stringify(data);
+  if (sig === lastSig) return 'unchanged';
+  lastSig = sig;
 
   const rows = data.rows.map(r => ({ c: r }));
   if (!rows.length) return null;
@@ -412,8 +418,9 @@ async function loadAccountReport() {
   let report = activeAccount.fallbackData;
   try {
     if (activeAccount.spreadsheetId) {
-      const data = await liveReport();
-      if (data) report = data;
+      const live = await liveReport();
+      if (live === 'unchanged') { btn.disabled = false; return; } // data sama, skip render
+      if (live) report = live;
     }
   } catch (e) {
     console.warn('Live fetch failed, using fallback', e);
@@ -586,8 +593,8 @@ async function loadAccountReport() {
 
 renderNav();
 loadAccountReport();
-// Auto-refresh every 30s → sheet updates reflect without manual click
-setInterval(loadAccountReport, 30000);
+// Fast poll: 3s auto-refresh, render hanya bila data berubah (dirty-check)
+setInterval(loadAccountReport, 3000);
 </script>
 </body>
 </html>
