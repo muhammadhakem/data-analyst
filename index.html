@@ -176,7 +176,7 @@ table.report-table tbody td{padding:12px 18px;vertical-align:middle;white-space:
       <button class="menu-btn" id="menu-btn" onclick="toggleSidebar()">☰</button>
       <div class="report-badge" id="report-source-badge">⚡ Live GSheet Direct</div>
     </div>
-    <button class="refresh-btn" id="refresh-btn" onclick="loadAccountReport()">
+    <button class="refresh-btn" id="refresh-btn" onclick="loadAccountReport(true)">
       <span>↻</span> Refresh
     </button>
   </header>
@@ -311,14 +311,14 @@ function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
 }
 
-async function liveReport() {
+async function liveReport(force) {
   const res = await fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(activeAccount.spreadsheetId)}&sheet=${encodeURIComponent(activeAccount.sheetName)}&t=${Date.now()}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || 'fetch failed');
 
-  // Dirty-check: render hanya bila data berubah
+  // Dirty-check: render hanya bila data berubah (skip bila force=true)
   const sig = JSON.stringify(data);
-  if (sig === lastSig) return 'unchanged';
+  if (!force && sig === lastSig) return 'unchanged';
   lastSig = sig;
 
   const rows = data.rows.map(r => ({ c: r }));
@@ -457,7 +457,7 @@ async function liveReport() {
 }
 
 // Table sorters (pure client-side, re-render section bodies only)
-let hostSort = 'avgGmv-desc';
+let hostSort = 'gmv-desc';
 let timeSort = 'gmv-desc';
 
 function sortHosts(v) {
@@ -501,7 +501,7 @@ function sortTime(v) {
 
 let hostCache = [], timeCache = [];
 
-async function loadAccountReport() {
+async function loadAccountReport(force) {
   const btn = document.getElementById('refresh-btn');
   const container = document.getElementById('report-view-container');
 
@@ -509,8 +509,8 @@ async function loadAccountReport() {
   let changed = true;
   try {
     if (activeAccount.spreadsheetId) {
-      const live = await liveReport();
-      if (live === 'unchanged') { changed = false; return; } // data sama, skip render — button sentuh tak
+      const live = await liveReport(force);   // force = skip dirty-check
+      if (live === 'unchanged') { changed = false; return; }
       if (live) report = live;
     }
   } catch (e) {
@@ -605,10 +605,10 @@ async function loadAccountReport() {
       <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px">
         <h2 class="section-title" style="margin-bottom:0">🎙️ Hosts Performance Ranking</h2>
         <select onchange="sortHosts(this.value)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:600;background:var(--surface);color:var(--text-main)">
-          <option value="avgGmv-desc">Avg GMV: High→Low</option>
-          <option value="avgGmv-asc">Avg GMV: Low→High</option>
-          <option value="gmv-desc">GMV: High→Low</option>
-          <option value="gmv-asc">GMV: Low→High</option>
+          <option value="gmv-desc">GMV (High)</option>
+          <option value="gmv-asc">GMV (Low)</option>
+          <option value="avgGmv-desc">Avg GMV (High)</option>
+          <option value="avgGmv-asc">Avg GMV (Low)</option>
         </select>
       </div>
       <div class="table-responsive">
@@ -651,10 +651,10 @@ async function loadAccountReport() {
       <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px">
         <h2 class="section-title" style="margin-bottom:0">⏰ Best Time Slots</h2>
         <select onchange="sortTime(this.value)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:600;background:var(--surface);color:var(--text-main)">
-          <option value="gmv-desc">GMV: High→Low</option>
-          <option value="gmv-asc">GMV: Low→High</option>
-          <option value="avgGmv-desc">Avg GMV: High→Low</option>
-          <option value="avgGmv-asc">Avg GMV: Low→High</option>
+          <option value="gmv-desc" selected>GMV (High)</option>
+          <option value="gmv-asc">GMV (Low)</option>
+          <option value="avgGmv-desc">Avg GMV (High)</option>
+          <option value="avgGmv-asc">Avg GMV (Low)</option>
         </select>
       </div>
       <div class="table-responsive">
@@ -694,6 +694,8 @@ async function loadAccountReport() {
 
   hostCache = report.hosts || [];
   timeCache = report.timeSlots || [];
+  sortHosts(hostSort);
+  sortTime(timeSort);
 
   btn.classList.remove('loading');
   btn.disabled = false;
