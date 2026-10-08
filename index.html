@@ -374,7 +374,7 @@ async function liveReport(force) {
   const B = prevM ? agg(pick(prevM)) : null;
   const D = (a, b) => (a == null || b == null) ? null : (((a - b) / b) * 100);
   const overall = [
-    { metric: 'Total Slots:', curr: A.slotEquiv, prev: B ? B.slotEquiv : 0, delta: D(A.slotEquiv, B?.slotEquiv), fmt: 'num' },
+    { metric: 'Total Slots: (Total Hours/3)', curr: Math.round(A.slotEquiv), prev: B ? Math.round(B.slotEquiv) : 0, delta: D(A.slotEquiv, B?.slotEquiv), fmt: 'num' },
     { metric: 'GMV:', curr: A.gmv, prev: B ? B.gmv : 0, delta: D(A.gmv, B && B.gmv), fmt: 'currency' },
     { metric: 'Average GMV per slot:', curr: A.gmv / A.slotEquiv, prev: B ? B.gmv / B.slotEquiv : 0, delta: D(A.gmv / A.slotEquiv, B ? B.gmv / B.slotEquiv : 0), fmt: 'currency' },
     { metric: 'New Followers:', curr: A.fol, prev: B ? B.fol : 0, delta: D(A.fol, B && B.fol), fmt: 'num' },
