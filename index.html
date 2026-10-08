@@ -510,7 +510,29 @@ function sortTime(v) {
   `).join('');
 }
 
-let hostCache = [], timeCache = [];
+let hostCache = [], timeCache = [], lastReport = null;
+
+async function fetchAIInsights() {
+  const btn = document.getElementById('ai-btn');
+  const out = document.getElementById('ai-output');
+  if (!lastReport || !out) return;
+  btn.disabled = true;
+  out.textContent = 'Analysing data…';
+  try {
+    const r = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ report: lastReport })
+    });
+    const d = await r.json();
+    if (r.ok && d.insights) out.textContent = d.insights;
+    else out.innerHTML = `<p>AI unavailable: ${d.error || 'unknown error'}</p>`;
+  } catch (e) {
+    out.innerHTML = `<p>AI unavailable: ${e.message}</p>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 function onMonthChange(v) {
   selMonth = v || '';
@@ -691,10 +713,13 @@ async function loadAccountReport(force) {
       </div>
     </div>
 
-    <!-- Key Slot Insights (Bottom Summary) -->
+    <!-- AI Key Insights -->
     <div class="card-block" style="margin-top:24px;padding:24px">
-      <h2 class="section-title">🎯 Key Performance Insights & Takeaways</h2>
-      <div style="font-size:13.5px;line-height:1.7;color:var(--text-muted)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <h2 class="section-title" style="margin-bottom:0">🤖 AI Performance Insights & Takeaways</h2>
+        <button type="button" id="ai-btn" onclick="fetchAIInsights()" style="padding:7px 14px;background:var(--accent,#6366f1);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">✨ Generate AI Analysis</button>
+      </div>
+      <div id="ai-output" style="font-size:13.5px;line-height:1.7;color:var(--text-muted);margin-top:14px;white-space:pre-line">
         <p>• <b>Morning session</b> recorded the highest Average GMV per slot at <b>${report.timeSlots[0]?.avgGmv ? 'RM ' + report.timeSlots[0].avgGmv.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</b> across <b>${report.timeSlots[0]?.slots || 0}</b> broadcast sessions.</p>
         <p style="margin-top:8px">• <b>Noon slot</b> maintained steady performance at <b>${report.timeSlots[1]?.avgGmv ? 'RM ' + report.timeSlots[1].avgGmv.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</b> avg GMV.</p>
         <p style="margin-top:8px">• Top performing host <b>${report.hosts[0]?.host || 'Leader'}</b> generated <b>${report.hosts[0]?.gmv ? 'RM ' + report.hosts[0].gmv.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</b> across <b>${report.hosts[0]?.slots || 0}</b> slots with outstanding <b>${report.hosts[0]?.ctorNum != null ? report.hosts[0].ctorNum.toFixed(2) + '%' : (report.hosts[0]?.ctor || '—')}</b> CTOR.</p>
@@ -704,6 +729,7 @@ async function loadAccountReport(force) {
 
   hostCache = report.hosts || [];
   timeCache = report.timeSlots || [];
+  lastReport = report;
   populateMonths(report.months);
   sortHosts(hostSort);
   sortTime(timeSort);
