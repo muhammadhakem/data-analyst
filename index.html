@@ -70,9 +70,15 @@ body{display:flex}
 .refresh-btn{
   padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:8px;
   font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;
-  transition:opacity .15s;
+  transition:opacity .15s, transform .1s;
+  position:relative;z-index:60;
 }
+.refresh-btn:active{transform:scale(0.97)}
+.refresh-btn.loading{opacity:0.7;cursor:wait}
 .refresh-btn:disabled{opacity:0.5;cursor:not-allowed}
+.refresh-btn .spin{display:none}
+.refresh-btn.loading .spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp 0.7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
 
 .content-body{padding:28px;max-width:1440px;margin:0 auto}
 
@@ -177,7 +183,7 @@ table.report-table tbody td{padding:12px 18px;vertical-align:middle;white-space:
       <div class="report-badge" id="report-source-badge">⚡ Live GSheet Direct</div>
     </div>
     <button type="button" class="refresh-btn" id="refresh-btn">
-      <span>↻</span> Refresh
+      <span class="spin"></span><span>↻</span> Refresh
     </button>
   </header>
 
@@ -679,8 +685,10 @@ async function loadAccountReport(force) {
 
 renderNav();
 loadAccountReport();
-// Kawalan fallback: guna addEventListener supaya klik selalu berfungsi
-document.getElementById('refresh-btn').addEventListener('click', (e) => {
+// Kawalan fallback: event delegation ke document — klik button mana-mana state
+document.addEventListener('click', (e) => {
+  const t = e.target && e.target.closest ? e.target.closest('#refresh-btn') : null;
+  if (!t) return;
   e.preventDefault();
   loadAccountReport(true);
 });
