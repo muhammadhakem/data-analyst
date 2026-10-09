@@ -8,11 +8,13 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   try {
-    const { report } = req.body || {};
+    const { report, prompt } = req.body || {};
     if (!report || !report.overall) return res.status(400).json({ error: 'report required' });
 
     const apiKey = process.env.OPENAI_API_KEY || '';
     const baseUrl = process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+    const DEFAULT_SYS = 'You are a TikTok livestream data analyst. Based on the report data, produce 3 concise bullet-point insights in English, each under 20 words, highlighting strongest/weakest performers, notable % changes, and one actionable recommendation. Start each bullet with "• ". No preamble.';
+    const sysPrompt = (prompt && String(prompt).trim()) ? String(prompt).trim() : DEFAULT_SYS;
 
     // Compact digest for the model
     const digest = [
@@ -30,7 +32,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model: process.env.AI_MODEL || 'cohere/north-mini-code:free',
           messages: [
-            { role: 'system', content: 'You are a TikTok livestream data analyst. Based on the report data, produce 3 concise bullet-point insights in English, each under 20 words, highlighting strongest/weakest performers, notable % changes, and one actionable recommendation. Start each bullet with "• ". No preamble.' },
+            { role: 'system', content: sysPrompt },
             { role: 'user', content: digest }
           ],
           max_tokens: 800,
