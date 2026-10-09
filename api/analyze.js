@@ -2,6 +2,29 @@
 // Call an OpenAI-compatible LLM with the aggregated report data.
 // Falls back to rule-based summary if no key / error.
 
+const DEFAULT_SYS = `You are a sharp TikTok livestream data analyst for a Malaysian brand.
+
+You receive TWO months of aggregated data (current vs previous) with % deltas for every metric:
+Total Slots, GMV, Avg GMV/slot, New Followers, CTR, CTOR, Views, Product Clicks, Comments, Avg Price, Items Sold.
+
+Your job is CAUSAL, correlation-first analysis — not a list of numbers:
+
+1. SANITY-CHECK the deltas against each other. Metrics should move together:
+   - If Total Slots changes X%, GMV should roughly follow. A gap between slot-delta and GMV-delta means per-slot efficiency changed — call it out (e.g. "slots -2% but GMV -10% means each slot earned ~8% less").
+   - Views -> Product Clicks -> Items Sold -> GMV form a funnel. Flag any metric that breaks rank order (e.g. views up but clicks down = weak hook/CTA).
+2. If a gap is small (under ~5pp) it is normal noise — say it is normal, do not alarm.
+3. If a gap is LARGE, state the likely cause and what data would confirm it.
+4. For hosts and time slots: when a host/slot moves sharply, check whether it is driven by SLOT COUNT change vs per-slot value change, and flag campaign/consistency angle.
+5. End with an overall observation + 2-3 concrete, actionable suggestions.
+
+Output format (Markdown, tight):
+- **Overall** — 2-4 bullets, each citing actual numbers and the correlation reasoning.
+- **Hosts** — flag biggest movers + why (slot count vs value).
+- **Time Slots** — flag biggest movers + why.
+- **Observation & Suggestions** — 2-3 actionable items.
+
+Cite real numbers from the data. Be direct. No preamble, no filler.`;
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -13,15 +36,26 @@ export default async function handler(req, res) {
 
     const apiKey = process.env.OPENAI_API_KEY || '';
     const baseUrl = process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
-    const DEFAULT_SYS = 'You are a TikTok livestream data analyst. Based on the report data, produce 3 concise bullet-point insights in English, each under 20 words, highlighting strongest/weakest performers, notable % changes, and one actionable recommendation. Start each bullet with "• ". No preamble.';
     const sysPrompt = (prompt && String(prompt).trim()) ? String(prompt).trim() : DEFAULT_SYS;
 
-    // Compact digest for the model
+    const pct = (d) => d == null ? '—' : (d >= 0 ? '+' : '') + d.toFixed(1) + '%';
+    const n2 = (v) => (v == null ? '—' : Number(v).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+    // Full digest with deltas + previous values (so the model can reason about causes)
     const digest = [
       `Period: ${report.currentMonthLabel} vs ${report.prevMonthLabel}`,
-      `Overall: ${report.overall.map(m => `${m.metric} ${m.curr} (Δ ${m.delta == null ? '—' : m.delta.toFixed(1)}%)`).join(' | ')}`,
-      `Hosts: ${report.hosts.slice(0, 8).map(h => `${h.host} GMV ${h.gmv.toFixed(2)} slots ${h.slots} avgGmv ${h.avgGmv.toFixed(2)} CTR ${h.ctrNum?.toFixed(2) ?? '—'}% CTOR ${h.ctorNum?.toFixed(2) ?? '—'}%`).join('; ')}`,
-      `Time slots: ${report.timeSlots.map(t => `${t.slot} GMV ${t.gmv.toFixed(2)} avg ${t.avgGmv.toFixed(2)} slots ${t.slots}`).join(' | ')}`
+      `OVERALL (current, previous, %delta):`,
+      ...report.overall.map(m => `  - ${m.metric} ${n2(m.curr)} | prev ${n2(m.prev)} | delta ${pct(m.delta)}`),
+      '',
+      `HOSTS (current month) — sorted by avg GMV/slot:`,
+      ...report.hosts.slice(0, 12).map(h =>
+        `  - ${h.host}: GMV ${n2(h.gmv)} (prev ${n2(h.prevGmv)}, delta ${pct(h.dGmv)}) | slots ${h.slots} (prev ${h.prevSlots ?? '—'}, delta ${pct(h.dSlots)}) | avgGMV/slot ${n2(h.avgGmv)} (delta ${pct(h.dAvgGmv)}) | CTR ${h.ctrNum?.toFixed(2) ?? '—'}% | CTOR ${h.ctorNum?.toFixed(2) ?? '—'}%`
+      ),
+      '',
+      `TIME SLOTS (current month):`,
+      ...report.timeSlots.map(t =>
+        `  - ${t.slot}: GMV ${n2(t.gmv)} (prev ${n2(t.prevGmv)}, delta ${pct(t.dGmv)}) | avgGMV/slot ${n2(t.avgGmv)} (prev ${n2(t.prevAvgGmv)}, delta ${pct(t.dAvgGmv)}) | slots ${t.slots} (prev ${t.prevSlots ?? '—'})`
+      )
     ].join('\n');
 
     let insights;
@@ -35,7 +69,7 @@ export default async function handler(req, res) {
             { role: 'system', content: sysPrompt },
             { role: 'user', content: digest }
           ],
-          max_tokens: 800,
+          max_tokens: 1200,
           temperature: 0.4
         })
       });
@@ -46,14 +80,19 @@ export default async function handler(req, res) {
     }
 
     if (!insights) {
-      // Fallback: rule-based
-      const topSlot = report.timeSlots[0];
-      const topHost = report.hosts?.[0];
-      const gmv = report.overall.find(m => m.metric.includes('GMV:')) || {};
+      // Fallback: rule-based (checks slot vs GMV correlation)
+      const find = (k) => report.overall.find(m => m.metric.toLowerCase().includes(k)) || {};
+      const gmv = find('gmv:'), slots = find('slot'), views = find('views'), sold = find('sold');
       const lines = [];
-      lines.push(`• ${topSlot?.slot || 'Best'} session led with RM ${(topSlot?.avgGmv ?? 0).toFixed(2)} avg GMV across ${topSlot?.slots ?? 0} broadcasts.`);
-      if (gmv.delta != null) lines.push(`• Overall GMV ${gmv.delta >= 0 ? 'grew' : 'declined'} ${Math.abs(gmv.delta).toFixed(1)}% vs previous month.`);
-      if (topHost) lines.push(`• Top host ${topHost.host} drove RM ${topHost.gmv.toFixed(2)} across ${topHost.slots} slots.`);
+      if (gmv.delta != null && slots.delta != null) {
+        const gap = gmv.delta - slots.delta;
+        lines.push(`• GMV ${gmv.delta >= 0 ? '+' : ''}${gmv.delta.toFixed(1)}% vs slots ${slots.delta >= 0 ? '+' : ''}${slots.delta.toFixed(1)}% → per-slot efficiency ${gap >= 0 ? 'up' : 'down'} ${Math.abs(gap).toFixed(1)}pp (${Math.abs(gap) > 5 ? 'notable' : 'normal'}).`);
+      }
+      if (views.delta != null && sold.delta != null) lines.push(`• Views ${views.delta >= 0 ? '+' : ''}${views.delta.toFixed(1)}% vs items sold ${sold.delta >= 0 ? '+' : ''}${sold.delta.toFixed(1)}%.`);
+      const topSlot = report.timeSlots[0];
+      if (topSlot) lines.push(`• Best slot: ${topSlot.slot} — RM ${n2(topSlot.avgGmv)} avg/slot across ${topSlot.slots} sessions.`);
+      const topHost = report.hosts?.[0];
+      if (topHost) lines.push(`• Top host: ${topHost.host} — RM ${n2(topHost.gmv)} across ${topHost.slots} slots.`);
       insights = lines.join('\n');
     }
 

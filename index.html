@@ -428,7 +428,10 @@ async function liveReport(force) {
       dAvgGmv: pct(h.avgGmv, p.avgGmv),
       dCtr: pct(h.ctrNum, p.ctrNum),
       dCtor: pct(h.ctorNum, p.ctorNum),
-      dView: pct(h.viewTime, p.viewTime)
+      dView: pct(h.viewTime, p.viewTime),
+      prevGmv: p.gmv ?? null,
+      prevSlots: p.slots ?? null,
+      dSlots: pct(h.slots, p.slots)
     };
   }).sort((x, y) => y.avgGmv - x.avgGmv);
 
@@ -450,7 +453,7 @@ async function liveReport(force) {
   slotsPrev.forEach(s => prevSlot[s.slot] = s);
   const timeSlots = slotsCur.map(t => {
     const p = prevSlot[t.slot] || {};
-    return { ...t, dGmv: pct(t.gmv, p.gmv), dAvgGmv: pct(t.avgGmv, p.avgGmv) };
+    return { ...t, dGmv: pct(t.gmv, p.gmv), dAvgGmv: pct(t.avgGmv, p.avgGmv), prevGmv: p.gmv ?? null, prevSlots: p.slots ?? null, prevAvgGmv: p.avgGmv ?? null };
   }).sort((a, b) => b.avgGmv - a.avgGmv);
 
   const ymd = (d) => d.toISOString().slice(0, 10);
