@@ -515,21 +515,33 @@ function sortTime(v) {
 
 let hostCache = [], timeCache = [], lastReport = null;
 
-// Render AI markdown-lite: **bold**, bullets, headings — no raw ** leak
+// Render AI markdown-lite: **bold**, bullets, headings, colored up/down %
 function renderInsights(md) {
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const inline = (s) => esc(s)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)/g, '<em>$1</em>');
+  const GREEN = '#16a34a', RED = '#dc2626';
+  const inline = (s) => {
+    let t = esc(s);
+    // colorize "up X%" / "up X.X%" green, "down X%" red (numbers only, keep words)
+    t = t.replace(/\b(up|rose|grew|naik)\b\s*([0-9]+(?:\.[0-9]+)?%?)/gi,
+      (m, w, n) => `<span style="color:${GREEN};font-weight:700">${w}<span style="color:${GREEN}"> ${n}</span></span>`);
+    t = t.replace(/\b(down|fell|dropped|declined|turun)\b\s*([0-9]+(?:\.[0-9]+)?%?)/gi,
+      (m, w, n) => `<span style="color:${RED};font-weight:700">${w}<span style="color:${RED}"> ${n}</span></span>`);
+    // bold **...**
+    t = t.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text-main)">$1</strong>');
+    return t;
+  };
   const out = [];
   for (const raw of String(md).split('\n')) {
     const line = raw.trimEnd();
-    if (!line.trim()) { out.push('<div style="height:6px"></div>'); continue; }
-    const h = line.match(/^\*\*(.+?)\*\*:?\s*(.*)$/);
-    if (h) { out.push(`<div style="font-weight:800;color:var(--text-main);margin:12px 0 4px">${inline(h[1])}${h[2] ? ': ' + inline(h[2]) : ''}</div>`); continue; }
+    if (!line.trim()) { out.push('<div style="height:7px"></div>'); continue; }
+    // section heading: a short line that is not a bullet (Overall / Hosts / ...)
+    if (!/^\s*(?:[-*•]|\d+\.)/.test(line) && line.trim().length < 40 && !/[.:]$/.test(line.trim())) {
+      out.push(`<div style="font-weight:800;color:var(--text-main);font-size:13px;letter-spacing:.2px;margin:14px 0 6px;text-transform:uppercase">${inline(line.trim())}</div>`);
+      continue;
+    }
     const b = line.match(/^\s*(?:[-*•]|\d+\.)\s+(.*)$/);
-    if (b) { out.push(`<div style="display:flex;gap:8px;margin:3px 0"><span style="color:#6366f1">•</span><span>${inline(b[1])}</span></div>`); continue; }
-    out.push(`<div style="margin:3px 0">${inline(line)}</div>`);
+    if (b) { out.push(`<div style="display:flex;gap:9px;margin:5px 0"><span style="color:#6366f1;flex-shrink:0">•</span><span>${inline(b[1])}</span></div>`); continue; }
+    out.push(`<div style="margin:5px 0">${inline(line)}</div>`);
   }
   return out.join('');
 }
