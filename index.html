@@ -512,11 +512,12 @@ function sortTime(v) {
 
 let hostCache = [], timeCache = [], lastReport = null;
 
-async function fetchAIInsights() {
+async function fetchAIInsights(force = true) {
   const btn = document.getElementById('ai-btn');
   const out = document.getElementById('ai-output');
-  if (!lastReport || !out) return;
+  if (!lastReport || !out || btn.dataset.running) return;
   btn.disabled = true;
+  btn.dataset.running = '1';
   out.textContent = 'Analysing data…';
   try {
     const r = await fetch('/api/analyze', {
@@ -530,6 +531,7 @@ async function fetchAIInsights() {
   } catch (e) {
     out.innerHTML = `<p>AI unavailable: ${e.message}</p>`;
   } finally {
+    delete btn.dataset.running;
     btn.disabled = false;
   }
 }
@@ -733,6 +735,7 @@ async function loadAccountReport(force) {
   populateMonths(report.months);
   sortHosts(hostSort);
   sortTime(timeSort);
+  fetchAIInsights();  // auto-run AI agent on this data
 
   btn.classList.remove('loading');
   btn.disabled = false;

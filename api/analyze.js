@@ -12,6 +12,7 @@ export default async function handler(req, res) {
     if (!report || !report.overall) return res.status(400).json({ error: 'report required' });
 
     const apiKey = process.env.OPENAI_API_KEY || '';
+    const baseUrl = process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
 
     // Compact digest for the model
     const digest = [
@@ -23,11 +24,11 @@ export default async function handler(req, res) {
 
     let insights;
     if (apiKey) {
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      const r = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: process.env.AI_MODEL || 'deepseek/deepseek-chat-v3-1:free',
           messages: [
             { role: 'system', content: 'You are a TikTok livestream data analyst. Based on the report data, produce 3 concise bullet-point insights in English, each under 20 words, highlighting strongest/weakest performers, notable % changes, and one actionable recommendation. Start each bullet with "• ". No preamble.' },
             { role: 'user', content: digest }
