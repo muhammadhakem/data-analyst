@@ -69,13 +69,27 @@ export default async function handler(req, res) {
             { role: 'system', content: sysPrompt },
             { role: 'user', content: digest }
           ],
-          max_tokens: 1200,
-          temperature: 0.4
+          max_tokens: 1500,
+          temperature: 0.4,
+          reasoning: { exclude: true }
         })
       });
       const d = await r.json();
       if (r.ok && d.choices?.[0]?.message?.content) {
         insights = d.choices[0].message.content.trim();
+      } else if (r.ok) {
+        // ponytail: one retry for flaky free models returning empty content
+        const r2 = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model: process.env.AI_MODEL || 'cohere/north-mini-code:free',
+            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: digest }],
+            max_tokens: 1500, temperature: 0.3, reasoning: { exclude: true }
+          })
+        });
+        const d2 = await r2.json();
+        if (r2.ok && d2.choices?.[0]?.message?.content) insights = d2.choices[0].message.content.trim();
       }
     }
 
