@@ -33,15 +33,13 @@ export default async function handler(req, res) {
             { role: 'system', content: 'You are a TikTok livestream data analyst. Based on the report data, produce 3 concise bullet-point insights in English, each under 20 words, highlighting strongest/weakest performers, notable % changes, and one actionable recommendation. Start each bullet with "• ". No preamble.' },
             { role: 'user', content: digest }
           ],
-          max_tokens: 250,
+          max_tokens: 800,
           temperature: 0.4
         })
       });
       const d = await r.json();
       if (r.ok && d.choices?.[0]?.message?.content) {
         insights = d.choices[0].message.content.trim();
-      } else {
-        insights = `DEBUG: status=${r.status} model=${process.env.AI_MODEL||'default'} keylen=${apiKey.length} base=${baseUrl} err=${JSON.stringify(d).slice(0,300)}`;
       }
     }
 
