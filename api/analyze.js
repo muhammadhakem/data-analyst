@@ -40,6 +40,8 @@ export default async function handler(req, res) {
       const d = await r.json();
       if (r.ok && d.choices?.[0]?.message?.content) {
         insights = d.choices[0].message.content.trim();
+      } else {
+        insights = `DEBUG: status=${r.status} model=${process.env.AI_MODEL||'default'} keylen=${apiKey.length} base=${baseUrl} err=${JSON.stringify(d).slice(0,300)}`;
       }
     }
 
