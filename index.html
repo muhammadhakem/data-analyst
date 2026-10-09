@@ -514,20 +514,24 @@ function sortTime(v) {
 }
 
 let hostCache = [], timeCache = [], lastReport = null;
-const PROMPT_KEY = 'ai_custom_prompt';
-function savePrompt() {
-  const v = document.getElementById('ai-prompt').value.trim();
-  localStorage.setItem(PROMPT_KEY, v);
-  fetchAIInsights();  // re-run with new prompt
-}
-function resetPrompt() {
-  localStorage.removeItem(PROMPT_KEY);
-  document.getElementById('ai-prompt').value = '';
-  fetchAIInsights();
-}
-function restorePrompt() {
-  const el = document.getElementById('ai-prompt');
-  if (el) el.value = localStorage.getItem(PROMPT_KEY) || '';
+
+// Render AI markdown-lite: **bold**, bullets, headings — no raw ** leak
+function renderInsights(md) {
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inline = (s) => esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)/g, '<em>$1</em>');
+  const out = [];
+  for (const raw of String(md).split('\n')) {
+    const line = raw.trimEnd();
+    if (!line.trim()) { out.push('<div style="height:6px"></div>'); continue; }
+    const h = line.match(/^\*\*(.+?)\*\*:?\s*(.*)$/);
+    if (h) { out.push(`<div style="font-weight:800;color:var(--text-main);margin:12px 0 4px">${inline(h[1])}${h[2] ? ': ' + inline(h[2]) : ''}</div>`); continue; }
+    const b = line.match(/^\s*(?:[-*•]|\d+\.)\s+(.*)$/);
+    if (b) { out.push(`<div style="display:flex;gap:8px;margin:3px 0"><span style="color:#6366f1">•</span><span>${inline(b[1])}</span></div>`); continue; }
+    out.push(`<div style="margin:3px 0">${inline(line)}</div>`);
+  }
+  return out.join('');
 }
 
 async function fetchAIInsights(force = true) {
@@ -541,10 +545,10 @@ async function fetchAIInsights(force = true) {
     const r = await fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ report: lastReport, prompt: localStorage.getItem(PROMPT_KEY) || '' })
+      body: JSON.stringify({ report: lastReport })
     });
     const d = await r.json();
-    if (r.ok && d.insights) out.textContent = d.insights;
+    if (r.ok && d.insights) out.innerHTML = renderInsights(d.insights);
     else out.innerHTML = `<p>AI unavailable: ${d.error || 'unknown error'}</p>`;
   } catch (e) {
     out.innerHTML = `<p>AI unavailable: ${e.message}</p>`;
@@ -739,15 +743,7 @@ async function loadAccountReport(force) {
         <h2 class="section-title" style="margin-bottom:0">🤖 AI Performance Insights & Takeaways</h2>
         <button type="button" id="ai-btn" onclick="fetchAIInsights()" style="padding:7px 14px;background:var(--accent,#6366f1);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">✨ Generate AI Analysis</button>
       </div>
-      <details style="margin-top:12px">
-        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-muted)">⚙️ Arahan analisis (custom prompt)</summary>
-        <textarea id="ai-prompt" rows="4" placeholder="Contoh: Fokus pada host yang perlu coaching, sebut % perubahan setiap metric, cadang 2 action." style="width:100%;margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;font-family:inherit;resize:vertical"></textarea>
-        <div style="margin-top:6px;display:flex;gap:8px">
-          <button type="button" onclick="savePrompt()" style="padding:5px 12px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">Simpan</button>
-          <button type="button" onclick="resetPrompt()" style="padding:5px 12px;background:#f1f5f9;color:var(--text-main);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">Reset</button>
-        </div>
-      </details>
-      <div id="ai-output" style="font-size:13.5px;line-height:1.7;color:var(--text-muted);margin-top:14px;white-space:pre-line"></div>
+      <div id="ai-output" style="font-size:13.5px;line-height:1.7;color:var(--text-muted);margin-top:14px"></div>
     </div>
   `;
 
@@ -758,7 +754,6 @@ async function loadAccountReport(force) {
   sortHosts(hostSort);
   sortTime(timeSort);
   fetchAIInsights();  // auto-run AI agent on this data
-  restorePrompt();
 
   btn.classList.remove('loading');
   btn.disabled = false;

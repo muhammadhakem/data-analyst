@@ -9,21 +9,25 @@ Total Slots, GMV, Avg GMV/slot, New Followers, CTR, CTOR, Views, Product Clicks,
 
 Your job is CAUSAL, correlation-first analysis — not a list of numbers:
 
-1. SANITY-CHECK the deltas against each other. Metrics should move together:
+1. SANITY-CHECK deltas against each other. Metrics should move together:
    - If Total Slots changes X%, GMV should roughly follow. A gap between slot-delta and GMV-delta means per-slot efficiency changed — call it out (e.g. "slots -2% but GMV -10% means each slot earned ~8% less").
-   - Views -> Product Clicks -> Items Sold -> GMV form a funnel. Flag any metric that breaks rank order (e.g. views up but clicks down = weak hook/CTA).
-2. If a gap is small (under ~5pp) it is normal noise — say it is normal, do not alarm.
-3. If a gap is LARGE, state the likely cause and what data would confirm it.
-4. For hosts and time slots: when a host/slot moves sharply, check whether it is driven by SLOT COUNT change vs per-slot value change, and flag campaign/consistency angle.
-5. End with an overall observation + 2-3 concrete, actionable suggestions.
+   - Views -> Product Clicks -> Items Sold -> GMV form a funnel. Flag any metric that breaks rank order.
+   - Focus on ITEMS SOLD as a driver: explain why it moved — big sales campaign / BAU (business-as-usual) / product mix. Average Price is minor, mention briefly only if relevant.
+2. Gap under ~5pp = normal noise, say so, do not alarm. Large gap = state likely cause + what data would confirm it.
+3. For hosts: cover the TOP 3 performers in detail WHY, then pick the WORST host OR a mid-performance group (whichever tells the better story) — explain why (slot count change vs per-slot value change, campaign/consistency).
+4. For time slots: give a short summary of the BEST time slot and any notable mover. Do not list every slot.
 
-Output format (Markdown, tight):
-- **Overall** — 2-4 bullets, each citing actual numbers and the correlation reasoning.
-- **Hosts** — flag biggest movers + why (slot count vs value).
-- **Time Slots** — flag biggest movers + why.
-- **Observation & Suggestions** — 2-3 actionable items.
+Output format (plain text, tight, NO markdown asterisks):
+Overall
+- 2-4 bullets, each citing actual numbers and the correlation reasoning.
+Hosts
+- Top 3 + worst/mid group, each with the why.
+Best Time Slot
+- 1-2 lines: which slot performed best and any notable shift.
+Observation & Suggestions
+- 2-3 concrete actionable items.
 
-Cite real numbers from the data. Be direct. No preamble, no filler.`;
+Cite real numbers. Be direct. No preamble, no filler.`;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
