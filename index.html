@@ -521,12 +521,12 @@ function renderInsights(md) {
   const GREEN = '#16a34a', RED = '#dc2626';
   const inline = (s) => {
     let t = esc(s);
-    // colorize "up X%" / "up X.X%" green, "down X%" red (numbers only, keep words)
-    t = t.replace(/\b(up|rose|grew|naik)\b\s*([0-9]+(?:\.[0-9]+)?%?)/gi,
-      (m, w, n) => `<span style="color:${GREEN};font-weight:700">${w}<span style="color:${GREEN}"> ${n}</span></span>`);
-    t = t.replace(/\b(down|fell|dropped|declined|turun)\b\s*([0-9]+(?:\.[0-9]+)?%?)/gi,
-      (m, w, n) => `<span style="color:${RED};font-weight:700">${w}<span style="color:${RED}"> ${n}</span></span>`);
-    // bold **...**
+    // colorize direction words + their number, tolerating ** markers
+    t = t.replace(/\b(up|rose|grew|naik)(\*\*)?\s*(\*\*)?\s*([0-9]+(?:\.[0-9]+)?%?)(\*\*)?/gi,
+      (m, w, a, b, n) => `<span style="color:${GREEN};font-weight:700">${w} ${n}</span>`);
+    t = t.replace(/\b(down|fell|dropped|declined|turun)(\*\*)?\s*(\*\*)?\s*([0-9]+(?:\.[0-9]+)?%?)(\*\*)?/gi,
+      (m, w, a, b, n) => `<span style="color:${RED};font-weight:700">${w} ${n}</span>`);
+    // remaining bold **...**
     t = t.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text-main)">$1</strong>');
     return t;
   };
