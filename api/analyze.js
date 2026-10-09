@@ -28,7 +28,7 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
-          model: process.env.AI_MODEL || 'deepseek/deepseek-chat-v3-1:free',
+          model: process.env.AI_MODEL || 'cohere/north-mini-code:free',
           messages: [
             { role: 'system', content: 'You are a TikTok livestream data analyst. Based on the report data, produce 3 concise bullet-point insights in English, each under 20 words, highlighting strongest/weakest performers, notable % changes, and one actionable recommendation. Start each bullet with "• ". No preamble.' },
             { role: 'user', content: digest }
