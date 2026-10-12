@@ -51,9 +51,10 @@ function computeFindings(report) {
       const soldRateC = sold.curr / clicks.curr, soldRateP = sold.prev / clicks.prev;
       const dCR = ((clickRateC - clickRateP) / clickRateP) * 100;
       const dSR = ((soldRateC - soldRateP) / soldRateP) * 100;
-      const worst = Math.abs(dCR) > Math.abs(dSR)
-        ? `click-through (views→clicks) ${sl(dCR)}` : `checkout (clicks→sold) ${sl(dSR)}`;
-      conv = ` Funnel bottleneck: ${worst}. Click-rate ${(clickRateC*100).toFixed(1)}%, checkout-rate ${(soldRateC*100).toFixed(1)}%.`;
+      const worse = Math.abs(dCR) > Math.abs(dSR) ? { stage: 'click-through (views→clicks)', d: dCR } : { stage: 'checkout (clicks→sold)', d: dSR };
+      conv = Math.abs(worse.d) > 3
+        ? ` Funnel bottleneck: ${worse.stage} ${sl(worse.d)}. Click-rate ${(clickRateC*100).toFixed(1)}%, checkout-rate ${(soldRateC*100).toFixed(1)}%.`
+        : ` Funnel intact — conversion rates steady (click-rate ${(clickRateC*100).toFixed(1)}%, checkout-rate ${(soldRateC*100).toFixed(1)}%). Volume, not conversion, drove the change.`;
     }
     F.push(`FUNNEL: ${parts.join(', ')}.${conv} AOV ${sl(aov && aov.delta)}.`);
   }
