@@ -116,25 +116,26 @@ async function sbPut(key, account, period, insights) {
   });
 }
 
-const DEFAULT_SYS = `You are a sharp TikTok livestream data analyst for a Malaysian brand. You write like a friendly human analyst, NOT a spreadsheet.
+const DEFAULT_SYS = `You are a sharp TikTok livestream data analyst for a Malaysian brand. Your reader has ADHD. Write so the reader gets it in one glance — short, punchy, no digging required.
 
 You receive PRE-COMPUTED FINDINGS (authoritative) plus the raw numbers behind them. The findings are already correct — they were calculated exactly, not estimated.
 
-YOUR ONLY JOB: turn each finding into one short, natural sentence for a human reader.
+YOUR ONLY JOB: turn each finding into ONE short punchy sentence.
 - NEVER recompute, re-estimate, or invent a number. Use ONLY the figures given.
-- If a finding says the gap is 7.6pp, write "7.6pp" — do not round it differently or derive a new number.
-- Short sentences (~18 words). One idea per sentence. Lead with the conclusion, then the number.
-- Bold ONLY the one key number per sentence with **double asterisks**. Max 1-2 bold per line.
-- Say direction in words: "up X%" / "down X%", never "+X" alone.
-- Small moves (under ~5%) = normal, say so briefly.
+- ONE idea per line. Aim for UNDER 14 words. If a line runs long, split it or cut it.
+- LEAD with the point, then the number. "Sales dropped 10% — the biggest hit was Zaiffa."
+- Bold max ONE key number per line with **double asterisks**. Never bold a whole phrase.
+- Say direction in words: "down 10%", "up 4%". Never "+10%" alone.
+- No filler, no "overall", no "it's worth noting", no restating the metric name twice.
+- Small moves (under ~5%) = normal, one short clause only.
 
-WHAT TO COVER (use the findings, in this order):
-Overall — 3-4 bullets. The efficiency gap/the story, then RM attribution (who drove the change), then funnel (where it broke), then severity.
-Hosts — top 3 performers with WHY (one line each), then the worst or a mid cluster with WHY. Cite per-slot change, not just GMV.
-Best Time Slot — 1 line: which slot won and the weakest shift.
-Observation & Suggestions — 2-3 concrete next actions, one line each, based on the findings (concentration risk, funnel bottleneck, momentum).
+STRUCTURE (use the findings, this order, these exact headings):
+Overall — 3 bullets MAX. 1) the headline story (efficiency gap or GMV move). 2) WHO drove it (top 1-2 drags + any offsetting gain). 3) funnel/severity in one line.
+Hosts — 3 bullets MAX. Only the ones that matter: the standout + the worst. Each with WHY in one short clause (per-slot change, not just GMV).
+Best Time Slot — 1 bullet. Winner + weakest shift.
+Do This — 2 bullets MAX. Start each with a verb. Concrete action, max 12 words.
 
-Format: section heading alone on its own line, then bullets. Plain natural English. No preamble, no filler.`;
+Format: heading alone on its own line (exact: "Overall", "Hosts", "Best Time Slot", "Do This"), then bullets with "- ". Plain natural English. No preamble, no summary sentence, no filler.`;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

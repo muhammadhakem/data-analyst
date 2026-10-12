@@ -535,17 +535,19 @@ function renderInsights(md) {
     return t;
   };
   const out = [];
+  let first = true;
   for (const raw of String(md).split('\n')) {
     const line = raw.trimEnd();
-    if (!line.trim()) { out.push('<div style="height:7px"></div>'); continue; }
+    if (!line.trim()) { out.push('<div style="height:6px"></div>'); continue; }
     // section heading: a short line that is not a bullet (Overall / Hosts / ...)
     if (!/^\s*(?:[-*•]|\d+\.)/.test(line) && line.trim().length < 40 && !/[.:]$/.test(line.trim())) {
-      out.push(`<div style="font-weight:800;color:var(--text-main);font-size:13px;letter-spacing:.2px;margin:14px 0 6px;text-transform:uppercase">${inline(line.trim())}</div>`);
+      out.push(`<div style="font-weight:800;color:#6366f1;font-size:12px;letter-spacing:.6px;margin:${first ? '2px' : '16px'} 0 7px;text-transform:uppercase">${inline(line.trim())}</div>`);
+      first = false;
       continue;
     }
     const b = line.match(/^\s*(?:[-*•]|\d+\.)\s+(.*)$/);
-    if (b) { out.push(`<div style="display:flex;gap:9px;margin:5px 0"><span style="color:#6366f1;flex-shrink:0">•</span><span>${inline(b[1])}</span></div>`); continue; }
-    out.push(`<div style="margin:5px 0">${inline(line)}</div>`);
+    if (b) { out.push(`<div style="display:flex;gap:9px;margin:6px 0;line-height:1.55"><span style="color:#6366f1;flex-shrink:0;font-weight:700">•</span><span>${inline(b[1])}</span></div>`); continue; }
+    out.push(`<div style="margin:6px 0;line-height:1.55">${inline(line)}</div>`);
   }
   return out.join('');
 }
