@@ -155,7 +155,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model: process.env.AI_MODEL || 'cohere/north-mini-code:free',
           messages: [{ role: 'system', content: DEFAULT_SYS }, { role: 'user', content: digest }],
-          max_tokens: 4000, temperature: temp, reasoning: { exclude: true }
+          max_tokens: 4000, temperature: temp, reasoning: { max_tokens: 700 }
         })
       }).then(r => r.json().then(d => ({ ok: r.ok, d })));
       let { ok, d } = await callLLM(0.4);
