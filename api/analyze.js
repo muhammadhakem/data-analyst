@@ -116,6 +116,47 @@ async function sbPut(key, account, period, insights) {
   });
 }
 
+// ── normalize LLM output to the exact ADHD-friendly shape ─────────────────
+function shapeInsights(md) {
+  if (!md) return md;
+  const alias = {
+    'overall': 'Overall', 'hosts': 'Hosts', 'host': 'Hosts',
+    'best time slot': 'Best Time Slot', 'time slot': 'Best Time Slot', 'time slots': 'Best Time Slot',
+    'do this': 'Do This', 'observation & suggestions': 'Do This', 'observations & suggestions': 'Do This',
+    'observation and suggestions': 'Do This', 'suggestions': 'Do This', 'takeaways': 'Do This'
+  };
+  const cap = { 'Overall': 3, 'Hosts': 3, 'Best Time Slot': 1, 'Do This': 2 };
+  const order = ['Overall', 'Hosts', 'Best Time Slot', 'Do This'];
+  const sections = {};
+  let cur = null;
+  for (const raw of String(md).split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const isBullet = /^[-*•]\s+/.test(line);
+    if (!isBullet) {
+      const norm = line.toLowerCase().replace(/[*#:]/g, '').trim();
+      const mapped = alias[norm] || (norm.length < 30 ? norm.replace(/\b\w/g, c => c.toUpperCase()) : null);
+      if (mapped && order.includes(mapped)) { cur = mapped; sections[cur] = sections[cur] || []; continue; }
+      // unknown non-bullet heading: treat as continuation only if we already have a section
+      if (cur) { sections[cur].push(line.replace(/^[-*•]\s+/, '')); continue; }
+      continue;
+    }
+    const text = line.replace(/^[-*•]\s+/, '');
+    const target = cur || 'Overall';
+    sections[target] = sections[target] || [];
+    sections[target].push(text);
+  }
+  const out = [];
+  for (const name of order) {
+    const items = (sections[name] || []).slice(0, cap[name]);
+    if (!items.length) continue;
+    out.push(name);
+    items.forEach(t => out.push('- ' + t));
+    out.push('');
+  }
+  return out.join('\n').trim() || md;
+}
+
 const DEFAULT_SYS = `You are a sharp TikTok livestream data analyst for a Malaysian brand. Your reader has ADHD. Write so the reader gets it in one glance — short, punchy, no digging required.
 
 You receive PRE-COMPUTED FINDINGS (authoritative) plus the raw numbers behind them. The findings are already correct — they were calculated exactly, not estimated.
@@ -129,13 +170,17 @@ YOUR ONLY JOB: turn each finding into ONE short punchy sentence.
 - No filler, no "overall", no "it's worth noting", no restating the metric name twice.
 - Small moves (under ~5%) = normal, one short clause only.
 
-STRUCTURE (use the findings, this order, these exact headings):
-Overall — 3 bullets MAX. 1) the headline story (efficiency gap or GMV move). 2) WHO drove it (top 1-2 drags + any offsetting gain). 3) funnel/severity in one line.
-Hosts — 3 bullets MAX. Only the ones that matter: the standout + the worst. Each with WHY in one short clause (per-slot change, not just GMV).
-Best Time Slot — 1 bullet. Winner + weakest shift.
-Do This — 2 bullets MAX. Start each with a verb. Concrete action, max 12 words.
+STRUCTURE — output EXACTLY these four headings, in this order, nothing else:
+Overall
+- exactly 3 bullets. 1) headline (efficiency gap or GMV move). 2) WHO drove it (top 1-2 drags + any offset gain). 3) funnel OR severity, one line.
+Hosts
+- exactly 3 bullets, max 14 words each. Standout + worst only, each with the per-slot WHY.
+Best Time Slot
+- exactly 1 bullet. Winner + weakest shift.
+Do This
+- exactly 2 bullets, max 12 words each, each starts with a verb.
 
-Format: heading alone on its own line (exact: "Overall", "Hosts", "Best Time Slot", "Do This"), then bullets with "- ". Plain natural English. No preamble, no summary sentence, no filler.`;
+Do NOT use any other heading (never "Observation & Suggestions", never "Takeaways"). Do NOT exceed the bullet counts. Bullets start with "- ". Plain natural English. No preamble, no closing line.`;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -192,8 +237,8 @@ export default async function handler(req, res) {
         })
       }).then(r => r.json().then(d => ({ ok: r.ok, d })));
       let { ok, d } = await callLLM(0.4);
-      if (ok && d.choices?.[0]?.message?.content) insights = d.choices[0].message.content.trim();
-      else if (ok) { const r2 = await callLLM(0.3); if (r2.ok && r2.d.choices?.[0]?.message?.content) insights = r2.d.choices[0].message.content.trim(); }
+      if (ok && d.choices?.[0]?.message?.content) insights = shapeInsights(d.choices[0].message.content.trim());
+      else if (ok) { const r2 = await callLLM(0.3); if (r2.ok && r2.d.choices?.[0]?.message?.content) insights = shapeInsights(r2.d.choices[0].message.content.trim()); }
     }
 
     if (!insights) {
