@@ -93,6 +93,29 @@ function computeFindings(report) {
   return F;
 }
 
+// ── Supabase cache (firm per month-year) ──────────────────────────────────
+const SB_URL = process.env.SUPABASE_URL || '';
+const SB_KEY = process.env.SUPABASE_SERVICE_KEY || '';
+const sbOn = () => !!(SB_URL && SB_KEY);
+async function sbGet(key) {
+  const r = await fetch(`${SB_URL}/rest/v1/ai_insights?cache_key=eq.${encodeURIComponent(key)}&select=insights`, {
+    headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY }
+  });
+  if (!r.ok) return null;
+  const rows = await r.json();
+  return rows[0]?.insights || null;
+}
+async function sbPut(key, account, period, insights) {
+  await fetch(`${SB_URL}/rest/v1/ai_insights`, {
+    method: 'POST',
+    headers: {
+      apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY,
+      'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify([{ cache_key: key, account, period, insights }])
+  });
+}
+
 const DEFAULT_SYS = `You are a sharp TikTok livestream data analyst for a Malaysian brand. You write like a friendly human analyst, NOT a spreadsheet.
 
 You receive PRE-COMPUTED FINDINGS (authoritative) plus the raw numbers behind them. The findings are already correct — they were calculated exactly, not estimated.
@@ -119,8 +142,16 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   try {
-    const { report } = req.body || {};
+    const { report, cacheKey, force } = req.body || {};
     if (!report || !report.overall) return res.status(400).json({ error: 'report required' });
+
+    const key = cacheKey || `${report.currentMonthLabel}|${report.title || ''}`;
+
+    // Cache-first: return the stored analysis for this month (firm), unless force-regenerate
+    if (sbOn() && !force) {
+      const hit = await sbGet(key);
+      if (hit) return res.status(200).json({ insights: hit, cached: true });
+    }
 
     const apiKey = process.env.OPENAI_API_KEY || '';
     const baseUrl = process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
@@ -169,6 +200,11 @@ export default async function handler(req, res) {
       insights = findings.length
         ? findings.map(f => '• ' + f.replace(/^[A-Z ]+: /, '')).join('\n')
         : '• Insufficient data for analysis.';
+    }
+
+    // Persist for this month-year so the analysis stays firm (only LLM output, not fallback)
+    if (sbOn() && insights && !insights.startsWith('•')) {
+      try { await sbPut(key, report.title || '', report.currentMonthLabel || '', insights); } catch (e) { /* cache write is best-effort */ }
     }
 
     return res.status(200).json({ insights });

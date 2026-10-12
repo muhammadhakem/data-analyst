@@ -550,28 +550,39 @@ function renderInsights(md) {
   return out.join('');
 }
 
-async function fetchAIInsights(force = true) {
+async function fetchAIInsights(force = false) {
   const btn = document.getElementById('ai-btn');
   const out = document.getElementById('ai-output');
   if (!lastReport || !out || btn.dataset.running) return;
   btn.disabled = true;
   btn.dataset.running = '1';
-  out.textContent = 'Analysing data…';
+  btn.textContent = force ? '🔄 Regenerating...' : 'Analysing...';
+  if (force) out.textContent = 'Regenerating analysis...';
+  else if (!out.querySelector('.ai-pending')) out.innerHTML = '<span class="ai-pending">Analysing data...</span>';
   try {
     const r = await fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ report: lastReport })
+      body: JSON.stringify({
+        report: lastReport,
+        cacheKey: (activeAccount.id || '') + '|' + (lastReport.currentMonthLabel || ''),
+        force: !!force
+      })
     });
     const d = await r.json();
-    if (r.ok && d.insights) out.innerHTML = renderInsights(d.insights);
+    if (r.ok && d.insights) out.innerHTML = renderInsights(d.insights) + (d.cached ? ' <span style="font-size:11px;color:#94a3b8">(saved)</span>' : '');
     else out.innerHTML = `<p>AI unavailable: ${d.error || 'unknown error'}</p>`;
   } catch (e) {
     out.innerHTML = `<p>AI unavailable: ${e.message}</p>`;
   } finally {
     delete btn.dataset.running;
     btn.disabled = false;
+    btn.textContent = '🔄 Regenerate';
   }
+}
+
+function regenerateInsights() {
+  if (confirm('Generate analysis baru? Analisis yang disimpan untuk bulan ini akan diganti.')) fetchAIInsights(true);
 }
 
 function onMonthChange(v) {
@@ -757,7 +768,7 @@ async function loadAccountReport(force) {
     <div class="card-block" style="margin-top:24px;padding:24px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
         <h2 class="section-title" style="margin-bottom:0">🤖 AI Performance Insights & Takeaways</h2>
-        <button type="button" id="ai-btn" onclick="fetchAIInsights()" style="padding:7px 14px;background:var(--accent,#6366f1);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">✨ Generate AI Analysis</button>
+        <button type="button" id="ai-btn" onclick="regenerateInsights()" style="padding:7px 14px;background:var(--accent,#6366f1);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">🔄 Regenerate</button>
       </div>
       <div id="ai-output" style="font-size:13.5px;line-height:1.7;color:var(--text-muted);margin-top:14px"></div>
     </div>
