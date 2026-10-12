@@ -1,29 +1,116 @@
 // api/analyze.js — AI insight generator (AI agent) for dashboard
-// Call an OpenAI-compatible LLM with the aggregated report data.
-// Falls back to rule-based summary if no key / error.
+// Deterministic findings computed in-code FIRST, then an LLM only PHRASES them.
+// ponytail: LLM as narrator, not as calculator — free models botch arithmetic.
 
-const DEFAULT_SYS = `You are a sharp TikTok livestream data analyst for a Malaysian brand. Write like a friendly human analyst, NOT a spreadsheet.
+// ── deterministic findings ────────────────────────────────────────────────
+function computeFindings(report) {
+  const F = [];
+  const M = {};
+  (report.overall || []).forEach(m => { M[String(m.metric).toLowerCase()] = m; });
+  const g = (frag) => { const k = Object.keys(M).find(k => k.includes(frag)); return k ? M[k] : null; };
+  const sl = (d) => d == null ? 'n/a' : (d >= 0 ? '+' : '') + d.toFixed(1) + '%';
+  const rm = (v) => (v == null ? 'n/a' : Number(v).toLocaleString('en-MY', { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+  const band = (d) => d == null ? 'n/a' : (Math.abs(d) < 5 ? 'normal noise (<5%)' : Math.abs(d) < 15 ? 'moderate (5-15%)' : 'severe (>15%)');
 
-You receive TWO months of aggregated data (current vs previous) with % deltas for every metric.
+  const gmv = g('gmv:'), slots = g('total slots'), perSlot = g('per slot');
+  const views = g('views'), clicks = g('product clicks'), sold = g('items sold');
+  const aov = g('average price'), ctor = g('ctor'), fol = g('followers');
+  const hasPrev = !!(gmv && gmv.prev);
 
-RULES FOR WRITING (the reader finds raw numbers hard to read — keep it clean):
-- Short, natural sentences. One idea per sentence. Max ~18 words.
-- Lead with the conclusion, then the number that proves it. Never dump a formula like "(-2.4% slots vs -10% GMV)".
-  Good: "Slots only dipped 2%, but GMV fell 10% — so each slot earned less."
-  Bad: "Slots -2.4% vs GMV -10.0%, giving a -7.6pp gap."
-- Bold ONLY the one key number per sentence using **double asterisks**. Max 1-2 bold per line.
+  // 1. Volume-vs-value efficiency
+  if (gmv && slots) {
+    const gap = (gmv.delta ?? 0) - (slots.delta ?? 0);
+    F.push(`EFFICIENCY: slots moved ${sl(slots.delta)}, GMV moved ${sl(gmv.delta)}. ` +
+      (Math.abs(gap) > 5
+        ? `Gap of ${gap.toFixed(1)}pp is REAL — value per slot diverged from volume. Avg GMV/slot ${sl(perSlot && perSlot.delta)}.`
+        : `Gap of ${gap.toFixed(1)}pp — slots and GMV moved together (healthy).`));
+  }
+
+  // 2. RM attribution — who drove the total GMV change
+  if (gmv && hasPrev && report.hosts && report.hosts.length) {
+    const totalChg = (gmv.curr ?? 0) - (gmv.prev ?? 0);
+    const deltas = report.hosts
+      .filter(h => h.prevGmv != null)
+      .map(h => ({ host: h.host, chg: h.gmv - h.prevGmv }))
+      .sort((a, b) => a.chg - b.chg);
+    const drags = deltas.filter(d => d.chg < 0).slice(0, 3)
+      .map(d => `${d.host} −RM ${rm(Math.abs(d.chg))}`);
+    const gains = deltas.filter(d => d.chg > 0).slice(-2).reverse()
+      .map(d => `${d.host} +RM ${rm(d.chg)}`);
+    F.push(`ATTRIBUTION: total GMV changed RM ${totalChg >= 0 ? '+' : '−'}${rm(Math.abs(totalChg))}. ` +
+      `Biggest drags: ${drags.length ? drags.join(', ') : 'none'}. ` +
+      `Offsetting gains: ${gains.length ? gains.join(', ') : 'none'}.`);
+  }
+
+  // 3. Funnel coherence: Views → Clicks → Sold → AOV
+  if (views && clicks && sold) {
+    const parts = [`views ${sl(views.delta)}`, `clicks ${sl(clicks.delta)}`, `items sold ${sl(sold.delta)}`];
+    let conv = '';
+    if (hasPrev && views.prev && clicks.prev && clicks.curr && sold.curr) {
+      const clickRateC = clicks.curr / views.curr, clickRateP = clicks.prev / views.prev;
+      const soldRateC = sold.curr / clicks.curr, soldRateP = sold.prev / clicks.prev;
+      const dCR = ((clickRateC - clickRateP) / clickRateP) * 100;
+      const dSR = ((soldRateC - soldRateP) / soldRateP) * 100;
+      const worst = Math.abs(dCR) > Math.abs(dSR)
+        ? `click-through (views→clicks) ${sl(dCR)}` : `checkout (clicks→sold) ${sl(dSR)}`;
+      conv = ` Funnel bottleneck: ${worst}. Click-rate ${(clickRateC*100).toFixed(1)}%, checkout-rate ${(soldRateC*100).toFixed(1)}%.`;
+    }
+    F.push(`FUNNEL: ${parts.join(', ')}.${conv} AOV ${sl(aov && aov.delta)}.`);
+  }
+
+  // 4. Severity band + CTOR
+  if (gmv) F.push(`SEVERITY: GMV move ${sl(gmv.delta)} = ${band(gmv.delta)} vs last month. CTOR ${sl(ctor && ctor.delta)}. Followers ${sl(fol && fol.delta)}.`);
+
+  // 5. Concentration risk
+  if (gmv && gmv.curr && report.hosts && report.hosts.length) {
+    const sorted = [...report.hosts].sort((a, b) => b.gmv - a.gmv);
+    const top1 = sorted[0], top3 = sorted.slice(0, 3).reduce((a, h) => a + h.gmv, 0);
+    F.push(`CONCENTRATION: ${top1.host} alone = ${((top1.gmv / gmv.curr) * 100).toFixed(0)}% of GMV. ` +
+      `Top 3 hosts = ${((top3 / gmv.curr) * 100).toFixed(0)}%.` +
+      (top1.gmv / gmv.curr > 0.4 ? ' HEAVILY dependent on one host — key-person risk.' : ''));
+  }
+
+  // 6. Time slots — best + biggest shift
+  if (report.timeSlots && report.timeSlots.length) {
+    const best = report.timeSlots[0];
+    const worst = [...report.timeSlots].sort((a, b) => (a.dAvgGmv ?? 0) - (b.dAvgGmv ?? 0))[0];
+    F.push(`TIME SLOT: best = ${best.slot} (RM ${rm(best.avgGmv)} avg/slot, ${sl(best.dAvgGmv)}). ` +
+      `Weakest shift = ${worst.slot} (${sl(worst.dAvgGmv)} per-slot).`);
+  }
+
+  // 7. Momentum — hosts with enough slots to trust
+  if (report.hosts && report.hosts.length) {
+    const rel = report.hosts.filter(h => h.slots >= 3 && h.dAvgGmv != null);
+    if (rel.length >= 2) {
+      const up = [...rel].sort((a, b) => b.dAvgGmv - a.dAvgGmv)[0];
+      const down = [...rel].sort((a, b) => a.dAvgGmv - b.dAvgGmv)[0];
+      F.push(`MOMENTUM (hosts with ≥3 slots): rising ${up.host} ${sl(up.dAvgGmv)} per-slot; ` +
+        `falling ${down.host} ${sl(down.dAvgGmv)} per-slot.`);
+    }
+  }
+
+  return F;
+}
+
+const DEFAULT_SYS = `You are a sharp TikTok livestream data analyst for a Malaysian brand. You write like a friendly human analyst, NOT a spreadsheet.
+
+You receive PRE-COMPUTED FINDINGS (authoritative) plus the raw numbers behind them. The findings are already correct — they were calculated exactly, not estimated.
+
+YOUR ONLY JOB: turn each finding into one short, natural sentence for a human reader.
+- NEVER recompute, re-estimate, or invent a number. Use ONLY the figures given.
+- If a finding says the gap is 7.6pp, write "7.6pp" — do not round it differently or derive a new number.
+- Short sentences (~18 words). One idea per sentence. Lead with the conclusion, then the number.
+- Bold ONLY the one key number per sentence with **double asterisks**. Max 1-2 bold per line.
 - Say direction in words: "up X%" / "down X%", never "+X" alone.
-- Ignore Average Price unless it is the main story. Focus on sold items: was it a big campaign month, a BAU month, or a product-mix change?
-- Small moves (under ~5%) = normal, say so briefly. Big gaps = explain the likely cause.
-- If slots and GMV move differently, explain the per-slot efficiency in plain words.
+- Small moves (under ~5%) = normal, say so briefly.
 
-WHAT TO COVER:
-Overall — 2-3 bullets on the headline story (slots vs GMV efficiency, the sold-items / campaign angle).
-Hosts — top 3 performers with WHY (one line each), then one worst or mid-group host with WHY. One punchy sentence each.
-Best Time Slot — 1 line: which slot won and one notable shift.
-Observation & Suggestions — 2-3 concrete next actions, one line each.
+WHAT TO COVER (use the findings, in this order):
+Overall — 3-4 bullets. The efficiency gap/the story, then RM attribution (who drove the change), then funnel (where it broke), then severity.
+Hosts — top 3 performers with WHY (one line each), then the worst or a mid cluster with WHY. Cite per-slot change, not just GMV.
+Best Time Slot — 1 line: which slot won and the weakest shift.
+Observation & Suggestions — 2-3 concrete next actions, one line each, based on the findings (concentration risk, funnel bottleneck, momentum).
 
-Format: section heading alone on its own line, then bullets. Plain, natural English. No preamble, no filler.`;
+Format: section heading alone on its own line, then bullets. Plain natural English. No preamble, no filler.`;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -31,83 +118,56 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   try {
-    const { report, prompt } = req.body || {};
+    const { report } = req.body || {};
     if (!report || !report.overall) return res.status(400).json({ error: 'report required' });
 
     const apiKey = process.env.OPENAI_API_KEY || '';
     const baseUrl = process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
-    const sysPrompt = (prompt && String(prompt).trim()) ? String(prompt).trim() : DEFAULT_SYS;
 
-    const pct = (d) => d == null ? '—' : (d >= 0 ? '+' : '') + d.toFixed(1) + '%';
     const n2 = (v) => (v == null ? '—' : Number(v).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    const pct = (d) => d == null ? '—' : (d >= 0 ? '+' : '') + d.toFixed(1) + '%';
 
-    // Full digest with deltas + previous values (so the model can reason about causes)
+    const findings = computeFindings(report);
+
+    // Raw numbers kept short — the model phrases, it does not calculate
     const digest = [
       `Period: ${report.currentMonthLabel} vs ${report.prevMonthLabel}`,
-      `OVERALL (current, previous, %delta):`,
-      ...report.overall.map(m => `  - ${m.metric} ${n2(m.curr)} | prev ${n2(m.prev)} | delta ${pct(m.delta)}`),
-      '',
-      `HOSTS (current month) — sorted by avg GMV/slot:`,
-      ...report.hosts.slice(0, 12).map(h =>
-        `  - ${h.host}: GMV ${n2(h.gmv)} (prev ${n2(h.prevGmv)}, delta ${pct(h.dGmv)}) | slots ${h.slots} (prev ${h.prevSlots ?? '—'}, delta ${pct(h.dSlots)}) | avgGMV/slot ${n2(h.avgGmv)} (delta ${pct(h.dAvgGmv)}) | CTR ${h.ctrNum?.toFixed(2) ?? '—'}% | CTOR ${h.ctorNum?.toFixed(2) ?? '—'}%`
+      `PRE-COMPUTED FINDINGS (authoritative — do not recompute):`,
+      ...findings.map(f => `  * ${f}`),
+      ``,
+      `RAW NUMBERS (for reference only):`,
+      ...report.overall.map(m => `  - ${m.metric} ${n2(m.curr)} | prev ${n2(m.prev)} | ${pct(m.delta)}`),
+      `  HOSTS:`,
+      ...report.hosts.slice(0, 10).map(h =>
+        `    ${h.host}: GMV ${n2(h.gmv)} (prev ${n2(h.prevGmv)}, ${pct(h.dGmv)}) | slots ${h.slots} (prev ${h.prevSlots ?? '—'}, ${pct(h.dSlots)}) | avg/slot ${n2(h.avgGmv)} (${pct(h.dAvgGmv)})`
       ),
-      '',
-      `TIME SLOTS (current month):`,
+      `  TIME SLOTS:`,
       ...report.timeSlots.map(t =>
-        `  - ${t.slot}: GMV ${n2(t.gmv)} (prev ${n2(t.prevGmv)}, delta ${pct(t.dGmv)}) | avgGMV/slot ${n2(t.avgGmv)} (prev ${n2(t.prevAvgGmv)}, delta ${pct(t.dAvgGmv)}) | slots ${t.slots} (prev ${t.prevSlots ?? '—'})`
+        `    ${t.slot}: avg/slot ${n2(t.avgGmv)} (${pct(t.dAvgGmv)}) | slots ${t.slots}`
       )
     ].join('\n');
 
     let insights;
     if (apiKey) {
-      const r = await fetch(`${baseUrl}/chat/completions`, {
+      const callLLM = (temp) => fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
         body: JSON.stringify({
           model: process.env.AI_MODEL || 'cohere/north-mini-code:free',
-          messages: [
-            { role: 'system', content: sysPrompt },
-            { role: 'user', content: digest }
-          ],
-          max_tokens: 1500,
-          temperature: 0.4,
-          reasoning: { exclude: true }
+          messages: [{ role: 'system', content: DEFAULT_SYS }, { role: 'user', content: digest }],
+          max_tokens: 1500, temperature: temp, reasoning: { exclude: true }
         })
-      });
-      const d = await r.json();
-      if (r.ok && d.choices?.[0]?.message?.content) {
-        insights = d.choices[0].message.content.trim();
-      } else if (r.ok) {
-        // ponytail: one retry for flaky free models returning empty content
-        const r2 = await fetch(`${baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model: process.env.AI_MODEL || 'cohere/north-mini-code:free',
-            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: digest }],
-            max_tokens: 1500, temperature: 0.3, reasoning: { exclude: true }
-          })
-        });
-        const d2 = await r2.json();
-        if (r2.ok && d2.choices?.[0]?.message?.content) insights = d2.choices[0].message.content.trim();
-      }
+      }).then(r => r.json().then(d => ({ ok: r.ok, d })));
+      let { ok, d } = await callLLM(0.4);
+      if (ok && d.choices?.[0]?.message?.content) insights = d.choices[0].message.content.trim();
+      else if (ok) { const r2 = await callLLM(0.3); if (r2.ok && r2.d.choices?.[0]?.message?.content) insights = r2.d.choices[0].message.content.trim(); }
     }
 
     if (!insights) {
-      // Fallback: rule-based (checks slot vs GMV correlation)
-      const find = (k) => report.overall.find(m => m.metric.toLowerCase().includes(k)) || {};
-      const gmv = find('gmv:'), slots = find('slot'), views = find('views'), sold = find('sold');
-      const lines = [];
-      if (gmv.delta != null && slots.delta != null) {
-        const gap = gmv.delta - slots.delta;
-        lines.push(`• GMV ${gmv.delta >= 0 ? '+' : ''}${gmv.delta.toFixed(1)}% vs slots ${slots.delta >= 0 ? '+' : ''}${slots.delta.toFixed(1)}% → per-slot efficiency ${gap >= 0 ? 'up' : 'down'} ${Math.abs(gap).toFixed(1)}pp (${Math.abs(gap) > 5 ? 'notable' : 'normal'}).`);
-      }
-      if (views.delta != null && sold.delta != null) lines.push(`• Views ${views.delta >= 0 ? '+' : ''}${views.delta.toFixed(1)}% vs items sold ${sold.delta >= 0 ? '+' : ''}${sold.delta.toFixed(1)}%.`);
-      const topSlot = report.timeSlots[0];
-      if (topSlot) lines.push(`• Best slot: ${topSlot.slot} — RM ${n2(topSlot.avgGmv)} avg/slot across ${topSlot.slots} sessions.`);
-      const topHost = report.hosts?.[0];
-      if (topHost) lines.push(`• Top host: ${topHost.host} — RM ${n2(topHost.gmv)} across ${topHost.slots} slots.`);
-      insights = lines.join('\n');
+      // Fallback: rule-based — reuse the deterministic findings (no LLM at all)
+      insights = findings.length
+        ? findings.map(f => '• ' + f.replace(/^[A-Z ]+: /, '')).join('\n')
+        : '• Insufficient data for analysis.';
     }
 
     return res.status(200).json({ insights });
