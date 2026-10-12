@@ -72,7 +72,7 @@ function computeFindings(report) {
 
   // 6. Time slots — best + biggest shift
   if (report.timeSlots && report.timeSlots.length) {
-    const best = report.timeSlots[0];
+    const best = [...report.timeSlots].sort((a, b) => (b.avgGmv ?? 0) - (a.avgGmv ?? 0))[0];
     const worst = [...report.timeSlots].sort((a, b) => (a.dAvgGmv ?? 0) - (b.dAvgGmv ?? 0))[0];
     F.push(`TIME SLOT: best = ${best.slot} (RM ${rm(best.avgGmv)} avg/slot, ${sl(best.dAvgGmv)}). ` +
       `Weakest shift = ${worst.slot} (${sl(worst.dAvgGmv)} per-slot).`);
