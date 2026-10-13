@@ -476,27 +476,31 @@ function buildProducts(skuRows, sv, imgMap, curName, prevName, topN) {
     if (!key) continue;
     const o = store[key] = store[key] || {
       pid, name, img: imgMap[pid] || '',
-      gmv: 0, sold: 0, gmvPrev: 0, soldPrev: 0,
-      imp: 0, clicks: 0, gpmS: 0, gpmN: 0
+      gmv: 0, sold: 0, imp: 0, clicks: 0,
+      gmvPrev: 0, soldPrev: 0, impPrev: 0, clicksPrev: 0
     };
     const gmv = num(sv(row, 'Attributed GMV(RM)')); // string like "RM914.44" → num() strips RM
     const sold = num(sv(row, 'Attributed items sold'));
     const imp = num(sv(row, 'Product Impressions'));
     const clicks = num(sv(row, 'Product Clicks'));
-    const gpm = num(sv(row, 'Watch GPM'));
     if (mon === curName) {
       o.gmv += gmv; o.sold += sold; o.imp += imp; o.clicks += clicks;
-      if (gpm > 0) { o.gpmS += gpm; o.gpmN += 1; }
     } else {
-      o.gmvPrev += gmv; o.soldPrev += sold;
+      o.gmvPrev += gmv; o.soldPrev += sold; o.impPrev += imp; o.clicksPrev += clicks;
     }
   }
+  // ponytail: Watch GPM is a RATE = GMV / impressions * 1000. Aggregate as total/total (weighted),
+  // never a simple average of per-row GPM — rows with tiny impressions would skew it.
+  const gpmOf = (g, i) => i > 0 ? (g / i) * 1000 : 0;
   const out = Object.values(store).map(o => ({
     name: o.name, img: o.img,
     gmv: o.gmv, sold: o.sold, gmvPrev: o.gmvPrev, soldPrev: o.soldPrev,
     aov: o.sold ? o.gmv / o.sold : 0,
-    gpm: o.gpmN ? o.gpmS / o.gpmN : 0,
-    impressions: o.imp, clicks: o.clicks
+    aovPrev: o.soldPrev ? o.gmvPrev / o.soldPrev : 0,
+    gpm: gpmOf(o.gmv, o.imp),
+    gpmPrev: gpmOf(o.gmvPrev, o.impPrev),
+    impressions: o.imp, impressionsPrev: o.impPrev,
+    clicks: o.clicks, clicksPrev: o.clicksPrev
   })).filter(p => p.sold > 0 || p.gmv > 0)
     .sort((a, b) => b.gmv - a.gmv)
     .slice(0, topN);
@@ -856,8 +860,15 @@ async function loadAccountReport(force) {
           <tbody>
             ${report.products.map((p, idx) => {
               const rankCls = idx === 0 ? 'rank-1' : (idx === 1 ? 'rank-2' : (idx === 2 ? 'rank-3' : ''));
-              const dGmv = p.gmvPrev > 0 ? ((p.gmv - p.gmvPrev) / p.gmvPrev) * 100 : null;
-              const dSold = p.soldPrev > 0 ? ((p.sold - p.soldPrev) / p.soldPrev) * 100 : null;
+              // every metric gets an up/down mark vs last month; GPM is a rate, so its delta is % change of the rate
+              const dOf = (cur, prev) => (prev > 0 ? ((cur - prev) / prev) * 100 : null);
+              const dGmv = dOf(p.gmv, p.gmvPrev);
+              const dSold = dOf(p.sold, p.soldPrev);
+              const dAov = dOf(p.aov, p.aovPrev);
+              const dGpm = dOf(p.gpm, p.gpmPrev);
+              const dImp = dOf(p.impressions, p.impressionsPrev);
+              const dClk = dOf(p.clicks, p.clicksPrev);
+              const mark = (d) => d == null ? '' : miniDelta(d);
               const thumb = p.img
                 ? `<img src="${p.img}" alt="" style="width:38px;height:38px;object-fit:cover;border-radius:7px;border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">`
                 : `<div style="width:38px;height:38px;border-radius:7px;background:#e2e8f0;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px">🖼️</div>`;
@@ -870,12 +881,12 @@ async function loadAccountReport(force) {
                       <span style="font-weight:600">${p.name || '—'}</span>
                     </div>
                   </td>
-                  <td class="mono" style="font-weight:700">${formatVal(p.gmv, 'currency')}${dGmv == null ? '' : miniDelta(dGmv)}</td>
-                  <td class="mono">${p.sold.toLocaleString('en-MY')}${dSold == null ? '' : miniDelta(dSold)}</td>
-                  <td class="mono">${formatVal(p.aov, 'currency')}</td>
-                  <td class="mono">${formatVal(p.gpm, 'currency')}</td>
-                  <td class="mono">${p.impressions.toLocaleString('en-MY')}</td>
-                  <td class="mono">${p.clicks.toLocaleString('en-MY')}</td>
+                  <td class="mono" style="font-weight:700">${formatVal(p.gmv, 'currency')}${mark(dGmv)}</td>
+                  <td class="mono">${p.sold.toLocaleString('en-MY')}${mark(dSold)}</td>
+                  <td class="mono">${formatVal(p.aov, 'currency')}${mark(dAov)}</td>
+                  <td class="mono">${formatVal(p.gpm, 'currency')}${mark(dGpm)}</td>
+                  <td class="mono">${p.impressions.toLocaleString('en-MY')}${mark(dImp)}</td>
+                  <td class="mono">${p.clicks.toLocaleString('en-MY')}${mark(dClk)}</td>
                 </tr>
               `;
             }).join('')}

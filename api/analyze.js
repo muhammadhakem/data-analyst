@@ -59,6 +59,22 @@ function computeFindings(report) {
     F.push(`FUNNEL: ${parts.join(', ')}.${conv} AOV ${sl(aov && aov.delta)}.`);
   }
 
+  // 3b. Product-level funnel (only when SKU data exists) — shelf impressions → clicks → sold
+  const PP = (report.products || []).filter(p => p.gmv > 0);
+  if (PP.length && hasPrev) {
+    const sImp = PP.reduce((a, p) => a + p.impressions, 0), sClk = PP.reduce((a, p) => a + p.clicks, 0), sSold = PP.reduce((a, p) => a + p.sold, 0);
+    const sImpP = PP.reduce((a, p) => a + p.impressionsPrev, 0), sClkP = PP.reduce((a, p) => a + p.clicksPrev, 0), sSoldP = PP.reduce((a, p) => a + p.soldPrev, 0);
+    if (sImp && sClk && sImpP && sClkP) {
+      const ctrC = (sClk / sImp) * 100, ctrP = (sClkP / sImpP) * 100;
+      const cvrC = sClk ? (sSold / sClk) * 100 : 0, cvrP = sClkP ? (sSoldP / sClkP) * 100 : 0;
+      const dCtr = ctrP ? ((ctrC - ctrP) / ctrP) * 100 : 0;
+      const dCvr = cvrP ? ((cvrC - cvrP) / cvrP) * 100 : 0;
+      const worst = Math.abs(dCtr) > Math.abs(dCvr) ? `shelf CTR ${sl(dCtr)}` : `click→sold ${sl(dCvr)}`;
+      F.push(`PRODUCT FUNNEL (top products): impressions→clicks ${ctrC.toFixed(1)}% (${sl(dCtr)}), clicks→sold ${cvrC.toFixed(1)}% (${sl(dCvr)}). ` +
+        `Weakest stage: ${worst}.`);
+    }
+  }
+
   // 4. Severity band + CTOR
   if (gmv) F.push(`SEVERITY: GMV move ${sl(gmv.delta)} = ${band(gmv.delta)} vs last month. CTOR ${sl(ctor && ctor.delta)}. Followers ${sl(fol && fol.delta)}.`);
 
@@ -88,6 +104,22 @@ function computeFindings(report) {
       F.push(`MOMENTUM (hosts with ≥3 slots): rising ${up.host} ${sl(up.dAvgGmv)} per-slot; ` +
         `falling ${down.host} ${sl(down.dAvgGmv)} per-slot.`);
     }
+  }
+
+  // 8. Products — top seller + biggest movers (only for months that have SKU data)
+  const P = (report.products || []).filter(p => p.gmv > 0);
+  if (P.length && gmv && gmv.curr) {
+    const top = P[0];
+    const withPrev = P.filter(p => p.gmvPrev > 0);
+    const dPct = (p) => ((p.gmv - p.gmvPrev) / p.gmvPrev) * 100;
+    const riser = [...withPrev].sort((a, b) => dPct(b) - dPct(a))[0];
+    const faller = [...withPrev].sort((a, b) => dPct(a) - dPct(b))[0];
+    const bestGpm = [...P].filter(p => p.gpm > 0).sort((a, b) => b.gpm - a.gpm)[0];
+    F.push(`PRODUCTS: top seller ${top.name} = RM ${rm(top.gmv)} (${((top.gmv / gmv.curr) * 100).toFixed(0)}% of GMV, ${top.sold} sold, GPM RM ${rm(top.gpm)}). ` +
+      `Top ${P.length} products = ${((P.reduce((a, p) => a + p.gmv, 0) / gmv.curr) * 100).toFixed(0)}% of GMV.` +
+      (riser ? ` Rising: ${riser.name} ${sl(dPct(riser))}.` : '') +
+      (faller ? ` Falling: ${faller.name} ${sl(dPct(faller))}.` : '') +
+      (bestGpm ? ` Best monetisation: ${bestGpm.name} GPM RM ${rm(bestGpm.gpm)}.` : ''));
   }
 
   return F;
@@ -122,11 +154,12 @@ function shapeInsights(md) {
   const alias = {
     'overall': 'Overall', 'hosts': 'Hosts', 'host': 'Hosts',
     'best time slot': 'Best Time Slot', 'time slot': 'Best Time Slot', 'time slots': 'Best Time Slot',
+    'top products': 'Top Products', 'top product': 'Top Products', 'products': 'Top Products', 'product': 'Top Products', 'best products': 'Top Products',
     'do this': 'Do This', 'observation & suggestions': 'Do This', 'observations & suggestions': 'Do This',
     'observation and suggestions': 'Do This', 'suggestions': 'Do This', 'takeaways': 'Do This'
   };
-  const cap = { 'Overall': 3, 'Hosts': 3, 'Best Time Slot': 1, 'Do This': 2 };
-  const order = ['Overall', 'Hosts', 'Best Time Slot', 'Do This'];
+  const cap = { 'Overall': 3, 'Hosts': 3, 'Best Time Slot': 1, 'Top Products': 2, 'Do This': 2 };
+  const order = ['Overall', 'Hosts', 'Best Time Slot', 'Top Products', 'Do This'];
   const sections = {};
   let cur = null;
   for (const raw of String(md).split('\n')) {
@@ -170,13 +203,15 @@ YOUR ONLY JOB: turn each finding into ONE short punchy sentence.
 - No filler, no "overall", no "it's worth noting", no restating the metric name twice.
 - Small moves (under ~5%) = normal, one short clause only.
 
-STRUCTURE — output EXACTLY these four headings, in this order, nothing else:
+STRUCTURE — output EXACTLY these headings, in this order, nothing else (Top Products only when product findings exist):
 Overall
 - exactly 3 bullets. 1) headline (efficiency gap or GMV move). 2) WHO drove it (top 1-2 drags + any offset gain). 3) funnel OR severity, one line.
 Hosts
 - exactly 3 bullets, max 14 words each. Standout + worst only, each with the per-slot WHY.
 Best Time Slot
 - exactly 1 bullet. Winner + weakest shift.
+Top Products
+- exactly 2 bullets, max 14 words each. Best seller + sharp mover. ONLY if product findings are present; skip the heading entirely if there are no product findings.
 Do This
 - exactly 2 bullets, max 12 words each, each starts with a verb.
 
@@ -222,7 +257,13 @@ export default async function handler(req, res) {
       `  TIME SLOTS:`,
       ...report.timeSlots.map(t =>
         `    ${t.slot}: avg/slot ${n2(t.avgGmv)} (${pct(t.dAvgGmv)}) | slots ${t.slots}`
-      )
+      ),
+      ...((report.products && report.products.length) ? [
+        `  TOP PRODUCTS:`,
+        ...report.products.slice(0, 10).map(p =>
+          `    ${p.name}: GMV ${n2(p.gmv)} (prev ${n2(p.gmvPrev)}, ${p.gmvPrev > 0 ? pct(((p.gmv - p.gmvPrev) / p.gmvPrev) * 100) : 'new'}) | sold ${p.sold} | AOV ${n2(p.aov)} | GPM ${n2(p.gpm)} | imp ${p.impressions} | clicks ${p.clicks}`
+        )
+      ] : [])
     ].join('\n');
 
     let insights;
