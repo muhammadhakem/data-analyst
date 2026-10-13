@@ -209,6 +209,7 @@ const ACCOUNTS = [
     label: 'Corolla (TikTok)',
     spreadsheetId: '1Yo7q3pMs_fo5bpnEtgcgOkbmLzVYA4O9A40nIOf3N68',
     sheetName: 'Raw Data',
+    skuSheet: 'SKU Data',
     fallbackData: {
       title: '(COROLLA) TIKTOK LIVESTREAM REPORT',
       date: '1 October 2026',
@@ -460,8 +461,74 @@ async function liveReport(force) {
     return { ...t, dGmv: pct(t.gmv, p.gmv), dAvgGmv: pct(t.avgGmv, p.avgGmv), prevGmv: p.gmv ?? null, prevSlots: p.slots ?? null, prevAvgGmv: p.avgGmv ?? null };
   }).sort((a, b) => b.avgGmv - a.avgGmv);
 
-  const ymd = (d) => d.toISOString().slice(0, 10);
+  // ── Top products: aggregate SKU Data rows per product for cur vs prev month ──
+function buildProducts(skuRows, sv, imgMap, curName, prevName, topN) {
+  const num = (v) => { const s = String(v ?? '').replace(/[^0-9.\-]/g, ''); return s ? parseFloat(s) : 0; };
+  const store = {};
+  const get = (o, ...keys) => { for (const k of keys) { const v = o[k]; if (v != null && v !== '') return v; } return ''; };
+  for (const r of (skuRows || [])) {
+    const row = r.c || r;
+    const mon = String(sv(row, 'Month') || '').trim();
+    if (mon !== curName && mon !== prevName) continue;
+    const pid = String(sv(row, 'Product ID') || '').trim();
+    const name = String(sv(row, 'Product name') || '').trim();
+    const key = pid || name;
+    if (!key) continue;
+    const o = store[key] = store[key] || {
+      pid, name, img: imgMap[pid] || '',
+      gmv: 0, sold: 0, gmvPrev: 0, soldPrev: 0,
+      imp: 0, clicks: 0, gpmS: 0, gpmN: 0
+    };
+    const gmv = num(sv(row, 'Attributed GMV(RM)')); // string like "RM914.44" → num() strips RM
+    const sold = num(sv(row, 'Attributed items sold'));
+    const imp = num(sv(row, 'Product Impressions'));
+    const clicks = num(sv(row, 'Product Clicks'));
+    const gpm = num(sv(row, 'Watch GPM'));
+    if (mon === curName) {
+      o.gmv += gmv; o.sold += sold; o.imp += imp; o.clicks += clicks;
+      if (gpm > 0) { o.gpmS += gpm; o.gpmN += 1; }
+    } else {
+      o.gmvPrev += gmv; o.soldPrev += sold;
+    }
+  }
+  const out = Object.values(store).map(o => ({
+    name: o.name, img: o.img,
+    gmv: o.gmv, sold: o.sold, gmvPrev: o.gmvPrev, soldPrev: o.soldPrev,
+    aov: o.sold ? o.gmv / o.sold : 0,
+    gpm: o.gpmN ? o.gpmS / o.gpmN : 0,
+    impressions: o.imp, clicks: o.clicks
+  })).filter(p => p.sold > 0 || p.gmv > 0)
+    .sort((a, b) => b.gmv - a.gmv)
+    .slice(0, topN);
+  return out;
+}
+
+const ymd = (d) => d.toISOString().slice(0, 10);
   const pretty = (m) => { const [y, mo] = m.split('-'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mo-1]} ${y}`; };
+
+  // ── Top products from SKU Data, images joined from the Setup tab's SKU list (PID → image URL) ──
+  let products = [];
+  try {
+    const [sku, setup] = await Promise.all([
+      fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(activeAccount.spreadsheetId)}&sheet=${encodeURIComponent(activeAccount.skuSheet)}&t=${Date.now()}`).then(r => r.json()),
+      fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(activeAccount.spreadsheetId)}&sheet=Setup&t=${Date.now()}`).then(r => r.json())
+    ]);
+    // image map: Setup row → col 6 = PID, col 9 = image URL
+    const imgMap = {};
+    (setup.rows || []).forEach(r => {
+      const row = r.c || r;
+      const pid = String(row[6] || '').trim(), url = String(row[9] || '').trim();
+      if (/^\d{6,}$/.test(pid) && /^https?:\/\//.test(url)) imgMap[pid] = url;
+    });
+    if (sku && sku.cols) {
+      const SI = {}; sku.cols.forEach((c, i) => SI[String(c).trim()] = i);
+      const sv = (row, k) => { const i = SI[k]; return (i === undefined || i >= row.length) ? '' : row[i]; };
+      const FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const monthName = (m) => FULL[+m.split('-')[1] - 1];
+      // ponytail: SKU tab filters by month NAME (no date column), not the YYYY-MM filter
+      products = buildProducts(sku.rows, sv, imgMap, monthName(curM), prevM ? monthName(prevM) : null, 10);
+    }
+  } catch (e) { console.warn('SKU/Setup fetch failed', e); }
 
   return {
     title: '(COROLLA) TIKTOK LIVESTREAM REPORT',
@@ -470,7 +537,7 @@ async function liveReport(force) {
     currentMonthLabel: `Current Month (${pretty(curM)})`,
     prevMonthLabel: prevM ? `Previous Month (${pretty(prevM)})` : `—`,
     months,        // senarai bulan untuk dropdown
-    overall, hosts, timeSlots
+    overall, hosts, timeSlots, products
   };
 }
 
@@ -765,6 +832,58 @@ async function loadAccountReport(force) {
         </table>
       </div>
     </div>
+
+    <!-- Top Products (from SKU Data + Setup image list) -->
+    ${report.products && report.products.length ? `
+    <div class="card-block" style="margin-top:24px">
+      <div style="padding:18px 22px;border-bottom:1px solid var(--border)">
+        <h2 class="section-title" style="margin-bottom:0">🛍️ Top 10 Best Products</h2>
+      </div>
+      <div class="table-responsive">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th style="width:50px">Rank</th>
+              <th>Product</th>
+              <th>GMV</th>
+              <th>Items Sold</th>
+              <th>Avg Price</th>
+              <th>Watch GPM</th>
+              <th>Impressions</th>
+              <th>Product Clicks</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${report.products.map((p, idx) => {
+              const rankCls = idx === 0 ? 'rank-1' : (idx === 1 ? 'rank-2' : (idx === 2 ? 'rank-3' : ''));
+              const dGmv = p.gmvPrev > 0 ? ((p.gmv - p.gmvPrev) / p.gmvPrev) * 100 : null;
+              const dSold = p.soldPrev > 0 ? ((p.sold - p.soldPrev) / p.soldPrev) * 100 : null;
+              const thumb = p.img
+                ? `<img src="${p.img}" alt="" style="width:38px;height:38px;object-fit:cover;border-radius:7px;border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">`
+                : `<div style="width:38px;height:38px;border-radius:7px;background:#e2e8f0;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px">🖼️</div>`;
+              return `
+                <tr>
+                  <td><span class="rank-badge ${rankCls}">${idx + 1}</span></td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:10px">
+                      ${thumb}
+                      <span style="font-weight:600">${p.name || '—'}</span>
+                    </div>
+                  </td>
+                  <td class="mono" style="font-weight:700">${formatVal(p.gmv, 'currency')}${dGmv == null ? '' : miniDelta(dGmv)}</td>
+                  <td class="mono">${p.sold.toLocaleString('en-MY')}${dSold == null ? '' : miniDelta(dSold)}</td>
+                  <td class="mono">${formatVal(p.aov, 'currency')}</td>
+                  <td class="mono">${formatVal(p.gpm, 'currency')}</td>
+                  <td class="mono">${p.impressions.toLocaleString('en-MY')}</td>
+                  <td class="mono">${p.clicks.toLocaleString('en-MY')}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ` : ''}
 
     <!-- AI Key Insights -->
     <div class="card-block" style="margin-top:24px;padding:24px">
