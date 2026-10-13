@@ -96,25 +96,30 @@ function computeFindings(report) {
   // 6. SEVERITY + conversion rates (weighted) in one line
   if (gmv) F.push(`SEVERITY: GMV ${sl(gmvD)} = ${band(gmvD)} vs last month. Avg CTR ${sl(ctr && ctr.delta)}, CTOR ${sl(ctor && ctor.delta)}, followers ${sl(fol && fol.delta)}.`);
 
-  // 7. PRODUCTS — align top products against the GMV line; who moved with it, who broke away.
+  // 7. PRODUCTS — the SKU tab is its own source; use ITS totals, never the Raw Data GMV.
   const P = (report.products || []).filter(p => p.gmv > 0);
-  if (P.length && gmv && gmv.curr) {
+  const sku = report.skuStats || null;
+  if (P.length && sku && sku.total > 0) {
     const top = P[0];
     const withPrev = P.filter(p => p.gmvPrev > 0);
     const dPct = (p) => ((p.gmv - p.gmvPrev) / p.gmvPrev) * 100;
     const riser = [...withPrev].sort((a, b) => dPct(b) - dPct(a))[0];
     const faller = [...withPrev].sort((a, b) => dPct(a) - dPct(b))[0];
-    const topShare = (P.reduce((a, p) => a + p.gmv, 0) / gmv.curr) * 100;
-    let s = `PRODUCTS: top seller ${top.name} = RM ${rm(top.gmv)} (${((top.gmv / gmv.curr) * 100).toFixed(0)}% of GMV, ${top.sold} sold, GPM RM ${rm(top.gpm)}). ` +
-      `Top ${P.length} = ${topShare.toFixed(0)}% of GMV.`;
-    if (gmvD != null) {
-      const topD = dPct(top);
-      s += ` Top product moved ${sl(topD)} vs GMV ${sl(gmvD)} — ` +
-        `${Math.abs(topD - gmvD) < TH ? 'it tracks the line' : (topD - gmvD > 0 ? 'held up better than the whole' : 'dragged harder than the whole')}.`;
-    }
+    const top10Share = (P.reduce((a, p) => a + p.gmv, 0) / sku.total) * 100;
+    let s = `PRODUCTS (SKU tab): top seller ${top.name} = RM ${rm(top.gmv)} (${((top.gmv / sku.total) * 100).toFixed(0)}% of SKU GMV, ${top.sold} sold, GPM RM ${rm(top.gpm)}). ` +
+      `Top ${P.length} = ${top10Share.toFixed(0)}% of SKU GMV.`;
     if (riser) s += ` Sharp riser ${riser.name} ${sl(dPct(riser))}.`;
     if (faller && faller.name !== top.name) s += ` Sharp faller ${faller.name} ${sl(dPct(faller))}.`;
     F.push(s);
+
+    // RELATE the two tabs: SKU total Δ against the Raw Data (session) GMV Δ. Two sources, one story.
+    if (sku.prev > 0 && gmvD != null) {
+      const skuD = ((sku.total - sku.prev) / sku.prev) * 100;
+      const gap = skuD - gmvD;
+      F.push(`PRODUCT vs SESSION: SKU-tab GMV ${sl(skuD)} vs Raw-tab (session) GMV ${sl(gmvD)} — ` +
+        `${Math.abs(gap) < TH ? 'both tabs agree, the drop is across every product' : (gap < 0 ? `products fell harder (${gap.toFixed(1)}pp) — the hit is concentrated at product level` : `sessions fell harder (${gap.toFixed(1)}pp) — the hit is in traffic/livestream, not the products`)}. ` +
+        `SKU total RM ${rm(sku.total)} across ${sku.count} products (the two tabs track different things, so totals are not expected to match).`);
+    }
   }
 
   // 7b. Product-level funnel (only when SKU data exists) — shelf impressions → clicks → sold
@@ -224,7 +229,7 @@ Hosts
 Best Time Slot
 - exactly 1 bullet. Winner by value + weakest shift, and note if slot count changed.
 Top Products
-- exactly 2 bullets, max 14 words each. 1) Top seller share + whether it tracks the GMV line. 2) Sharp riser + sharp faller. ONLY if product findings are present; skip the heading entirely if there are no product findings.
+- exactly 2 bullets, max 14 words each. 1) Top seller share within the SKU tab's OWN GMV + whether products vs sessions moved together or apart. 2) Sharp riser + sharp faller. ONLY if product findings are present; skip the heading entirely if there are no product findings. Note: the SKU tab and the Raw Data tab are SEPARATE sources — never imply their totals should match.
 Do This
 - exactly 2 bullets, max 12 words each, each starts with a verb.
 
@@ -272,7 +277,8 @@ export default async function handler(req, res) {
         `    ${t.slot}: avg/slot ${n2(t.avgGmv)} (${pct(t.dAvgGmv)}) | slots ${t.slots}`
       ),
       ...((report.products && report.products.length) ? [
-        `  TOP PRODUCTS:`,
+        `  TOP PRODUCTS (SKU tab — its own source, do NOT compare its total to the Raw Data GMV):`,
+        ...(report.skuStats ? [`    SKU total RM ${n2(report.skuStats.total)} vs prev RM ${n2(report.skuStats.prev)} across ${report.skuStats.count} products`] : []),
         ...report.products.slice(0, 10).map(p =>
           `    ${p.name}: GMV ${n2(p.gmv)} (prev ${n2(p.gmvPrev)}, ${p.gmvPrev > 0 ? pct(((p.gmv - p.gmvPrev) / p.gmvPrev) * 100) : 'new'}) | sold ${p.sold} | AOV ${n2(p.aov)} | GPM ${n2(p.gpm)} | imp ${p.impressions} | clicks ${p.clicks}`
         )

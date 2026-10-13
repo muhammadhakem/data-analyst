@@ -499,7 +499,7 @@ function buildProducts(skuRows, sv, imgMap, curName, prevName, topN) {
   // ponytail: Watch GPM is a RATE = GMV / impressions * 1000. Aggregate as total/total (weighted),
   // never a simple average of per-row GPM — rows with tiny impressions would skew it.
   const gpmOf = (g, i) => i > 0 ? (g / i) * 1000 : 0;
-  const out = Object.values(store).map(o => ({
+  const items = Object.values(store).map(o => ({
     name: o.name, img: o.img,
     gmv: o.gmv, sold: o.sold, gmvPrev: o.gmvPrev, soldPrev: o.soldPrev,
     aov: o.sold ? o.gmv / o.sold : 0,
@@ -507,11 +507,15 @@ function buildProducts(skuRows, sv, imgMap, curName, prevName, topN) {
     gpm: gpmOf(o.gmv, o.imp),
     gpmPrev: gpmOf(o.gmvPrev, o.impPrev),
     impressions: o.imp, impressionsPrev: o.impPrev,
-    clicks: o.clicks, clicksPrev: o.clicksPrev
+    clicks: o.clicks, clicksPrev: o.clicksPrev,
+    impPrev: o.impPrev
   })).filter(p => p.sold > 0 || p.gmv > 0)
-    .sort((a, b) => b.gmv - a.gmv)
-    .slice(0, topN);
-  return out;
+    .sort((a, b) => b.gmv - a.gmv);
+  // SKU tab's OWN totals (all products, not just the top N) — so the analyst never needs the Raw Data tab
+  const all = Object.values(store);
+  const skuTotal = all.reduce((a, o) => a + o.gmv, 0);
+  const skuTotalPrev = all.reduce((a, o) => a + o.gmvPrev, 0);
+  return { items: items.slice(0, topN), skuTotal, skuTotalPrev, productCount: items.length };
 }
 
 const ymd = (d) => d.toISOString().slice(0, 10);
@@ -519,6 +523,7 @@ const ymd = (d) => d.toISOString().slice(0, 10);
 
   // ── Top products from SKU Data, images joined from the Setup tab's SKU list (PID → image URL) ──
   let products = [];
+  let skuStats = null;  // SKU tab's own monthly GMV total — kept separate from Raw Data GMV
   try {
     const [sku, setup] = await Promise.all([
       fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(activeAccount.spreadsheetId)}&sheet=${encodeURIComponent(activeAccount.skuSheet)}&t=${Date.now()}`).then(r => r.json()),
@@ -537,7 +542,9 @@ const ymd = (d) => d.toISOString().slice(0, 10);
       const FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
       const monthName = (m) => FULL[+m.split('-')[1] - 1];
       // ponytail: SKU tab filters by month NAME (no date column), not the YYYY-MM filter
-      products = buildProducts(sku.rows, sv, imgMap, monthName(curM), prevM ? monthName(prevM) : null, 10);
+      const built = buildProducts(sku.rows, sv, imgMap, monthName(curM), prevM ? monthName(prevM) : null, 10);
+      products = built.items;
+      skuStats = { total: built.skuTotal, prev: built.skuTotalPrev, count: built.productCount };
     }
   } catch (e) { console.warn('SKU/Setup fetch failed', e); }
 
@@ -548,7 +555,7 @@ const ymd = (d) => d.toISOString().slice(0, 10);
     currentMonthLabel: `Current Month (${pretty(curM)})`,
     prevMonthLabel: prevM ? `Previous Month (${pretty(prevM)})` : `—`,
     months,        // senarai bulan untuk dropdown
-    overall, hosts, timeSlots, products
+    overall, hosts, timeSlots, products, skuStats
   };
 }
 
