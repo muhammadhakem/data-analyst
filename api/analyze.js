@@ -91,8 +91,12 @@ function computeFindings(report) {
   if (report.timeSlots && report.timeSlots.length) {
     const best = [...report.timeSlots].sort((a, b) => (b.avgGmv ?? 0) - (a.avgGmv ?? 0))[0];
     const worst = [...report.timeSlots].sort((a, b) => (a.dAvgGmv ?? 0) - (b.dAvgGmv ?? 0))[0];
-    F.push(`TIME SLOT: best = ${best.slot} (RM ${rm(best.avgGmv)} avg/slot, ${sl(best.dAvgGmv)}). ` +
-      `Weakest shift = ${worst.slot} (${sl(worst.dAvgGmv)} per-slot).`);
+    if (best.slot === worst.slot) {
+      F.push(`TIME SLOT: best earner = ${best.slot} (RM ${rm(best.avgGmv)} avg/slot) but still the sharpest fall ${sl(best.dAvgGmv)} per-slot. All shifts down.`);
+    } else {
+      F.push(`TIME SLOT: best = ${best.slot} (RM ${rm(best.avgGmv)} avg/slot, ${sl(best.dAvgGmv)}). ` +
+        `Weakest shift = ${worst.slot} (${sl(worst.dAvgGmv)} per-slot).`);
+    }
   }
 
   // 7. Momentum — hosts with enough slots to trust
@@ -115,11 +119,12 @@ function computeFindings(report) {
     const riser = [...withPrev].sort((a, b) => dPct(b) - dPct(a))[0];
     const faller = [...withPrev].sort((a, b) => dPct(a) - dPct(b))[0];
     const bestGpm = [...P].filter(p => p.gpm > 0).sort((a, b) => b.gpm - a.gpm)[0];
+    const bestGpmLine = (bestGpm && bestGpm.name !== top.name) ? ` Best monetisation: ${bestGpm.name} GPM RM ${rm(bestGpm.gpm)}.` : '';
     F.push(`PRODUCTS: top seller ${top.name} = RM ${rm(top.gmv)} (${((top.gmv / gmv.curr) * 100).toFixed(0)}% of GMV, ${top.sold} sold, GPM RM ${rm(top.gpm)}). ` +
       `Top ${P.length} products = ${((P.reduce((a, p) => a + p.gmv, 0) / gmv.curr) * 100).toFixed(0)}% of GMV.` +
       (riser ? ` Rising: ${riser.name} ${sl(dPct(riser))}.` : '') +
       (faller ? ` Falling: ${faller.name} ${sl(dPct(faller))}.` : '') +
-      (bestGpm ? ` Best monetisation: ${bestGpm.name} GPM RM ${rm(bestGpm.gpm)}.` : ''));
+      bestGpmLine);
   }
 
   return F;
