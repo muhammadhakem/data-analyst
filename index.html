@@ -610,13 +610,16 @@ function renderInsights(md) {
   const GREEN = '#16a34a', RED = '#dc2626';
   const inline = (s) => {
     let t = esc(s);
-    // colorize direction words + their number, tolerating ** markers
-    t = t.replace(/\b(up|rose|grew|naik)(\*\*)?\s*(\*\*)?\s*([0-9]+(?:\.[0-9]+)?%?)(\*\*)?/gi,
+    // colorize direction words + their number, tolerating ** markers and a trailing pp
+    const SIGN = '([0-9]+(?:\\.[0-9]+)?%?(?:pp)?)';
+    t = t.replace(new RegExp(`\\b(up|rose|grew|naik)(\\*\\*)?\\s*(\\*\\*)?\\s*${SIGN}(\\*\\*)?`, 'gi'),
       (m, w, a, b, n) => `<span style="color:${GREEN};font-weight:700">${w} ${n}</span>`);
-    t = t.replace(/\b(down|fell|dropped|declined|turun)(\*\*)?\s*(\*\*)?\s*([0-9]+(?:\.[0-9]+)?%?)(\*\*)?/gi,
+    t = t.replace(new RegExp(`\\b(down|fell|dropped|declined|turun)(\\*\\*)?\\s*(\\*\\*)?\\s*${SIGN}(\\*\\*)?`, 'gi'),
       (m, w, a, b, n) => `<span style="color:${RED};font-weight:700">${w} ${n}</span>`);
     // remaining bold **...**
     t = t.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text-main)">$1</strong>');
+    // any orphan ** left by a half-eaten bold span — strip so it never leaks to the reader
+    t = t.replace(/\*\*/g, '');
     return t;
   };
   const out = [];
