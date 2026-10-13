@@ -412,7 +412,9 @@ async function liveReport(force) {
       o.clicks += num(get(r, 'Product clicks'));
       o.views += num(get(r, 'Views'));
       o.orders += num(get(r, 'Attributed orders'));
-      const vpv = num(get(r, 'Avg. viewing duration per view')), vw = num(get(r, 'Views'));
+      // ponytail: "Avg. viewing duration per view" is blank before Apr 2026; "Avg. viewing duration"
+      // is the same metric (ratio 1.000 when both present) and is always populated → fallback.
+      const vpv = num(get(r, 'Avg. viewing duration per view')) || num(get(r, 'Avg. viewing duration')), vw = num(get(r, 'Views'));
       if (vpv > 0 && vw > 0) { o.viewSecs += vpv * vw; o.viewN += vw; }
     });
     return Object.values(hMap).map(o => ({
