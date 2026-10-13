@@ -14,52 +14,110 @@ function computeFindings(report) {
 
   const gmv = g('gmv:'), slots = g('total slots'), perSlot = g('per slot');
   const views = g('views'), clicks = g('product clicks'), sold = g('items sold');
-  const aov = g('average price'), ctor = g('ctor'), fol = g('followers');
+  const comm = g('comments'), aov = g('average price'), ctor = g('ctor'), ctr = g('average ctr'), fol = g('followers');
   const hasPrev = !!(gmv && gmv.prev);
+  const gmvD = gmv && gmv.delta != null ? gmv.delta : null;
+  const TH = 5; // pp threshold: within this, two deltas are "in line"
 
-  // 1. Volume-vs-value efficiency
-  if (gmv && slots) {
-    const gap = (gmv.delta ?? 0) - (slots.delta ?? 0);
-    F.push(`EFFICIENCY: slots moved ${sl(slots.delta)}, GMV moved ${sl(gmv.delta)}. ` +
-      (Math.abs(gap) > 5
-        ? `Gap of ${gap.toFixed(1)}pp is REAL — value per slot diverged from volume. Avg GMV/slot ${sl(perSlot && perSlot.delta)}.`
-        : `Gap of ${gap.toFixed(1)}pp — slots and GMV moved together (healthy).`));
+  // 1. ANCHOR — GMV vs slots, the efficiency reframe (Akiem's core rule).
+  // A driver that fell LESS than GMV actually OUTPERFORMED; the gap is the real story, not the raw drop.
+  if (gmv && slots && gmvD != null && slots.delta != null) {
+    const gap = gmvD - slots.delta;
+    let read;
+    if (Math.abs(gap) < TH) read = `slots and GMV moved together (gap ${gap.toFixed(1)}pp) — this was a volume move, not an efficiency move.`;
+    else if (gap > 0) read = `slots fell harder than GMV (gap +${gap.toFixed(1)}pp) — GMV held better than volume, so per-slot value actually ROSE.`;
+    else read = `GMV fell harder than slots (gap ${gap.toFixed(1)}pp) — each slot earned less; efficiency, not volume, is the problem.`;
+    F.push(`ANCHOR: GMV ${sl(gmvD)} vs slots ${sl(slots.delta)}. Avg GMV/slot ${sl(perSlot && perSlot.delta)}. ${read}`);
   }
 
-  // 2. RM attribution — who drove the total GMV change
-  if (gmv && hasPrev && report.hosts && report.hosts.length) {
-    const totalChg = (gmv.curr ?? 0) - (gmv.prev ?? 0);
-    const deltas = report.hosts
-      .filter(h => h.prevGmv != null)
-      .map(h => ({ host: h.host, chg: h.gmv - h.prevGmv }))
-      .sort((a, b) => a.chg - b.chg);
-    const drags = deltas.filter(d => d.chg < 0).slice(0, 3)
-      .map(d => `${d.host} −RM ${rm(Math.abs(d.chg))}`);
-    const gains = deltas.filter(d => d.chg > 0).slice(-2).reverse()
-      .map(d => `${d.host} +RM ${rm(d.chg)}`);
-    F.push(`ATTRIBUTION: total GMV changed RM ${totalChg >= 0 ? '+' : '−'}${rm(Math.abs(totalChg))}. ` +
-      `Biggest drags: ${drags.length ? drags.join(', ') : 'none'}. ` +
-      `Offsetting gains: ${gains.length ? gains.join(', ') : 'none'}.`);
-  }
-
-  // 3. Funnel coherence: Views → Clicks → Sold → AOV
-  if (views && clicks && sold) {
-    const parts = [`views ${sl(views.delta)}`, `clicks ${sl(clicks.delta)}`, `items sold ${sl(sold.delta)}`];
-    let conv = '';
-    if (hasPrev && views.prev && clicks.prev && clicks.curr && sold.curr) {
-      const clickRateC = clicks.curr / views.curr, clickRateP = clicks.prev / views.prev;
-      const soldRateC = sold.curr / clicks.curr, soldRateP = sold.prev / clicks.prev;
-      const dCR = ((clickRateC - clickRateP) / clickRateP) * 100;
-      const dSR = ((soldRateC - soldRateP) / soldRateP) * 100;
-      const worse = Math.abs(dCR) > Math.abs(dSR) ? { stage: 'click-through (views→clicks)', d: dCR } : { stage: 'checkout (clicks→sold)', d: dSR };
-      conv = Math.abs(worse.d) > 3
-        ? ` Funnel bottleneck: ${worse.stage} ${sl(worse.d)}. Click-rate ${(clickRateC*100).toFixed(1)}%, checkout-rate ${(soldRateC*100).toFixed(1)}%.`
-        : ` Funnel intact — conversion rates steady (click-rate ${(clickRateC*100).toFixed(1)}%, checkout-rate ${(soldRateC*100).toFixed(1)}%). Volume, not conversion, drove the change.`;
+  // 2. ALIGNMENT — every driver vs the GMV line. Off-line drivers are where to dig.
+  const drivers = [
+    ['Total Views', views], ['Product Clicks', clicks], ['Items Sold', sold],
+    ['New Followers', fol], ['Comments', comm], ['Total Slots', slots]
+  ].filter(([, m]) => m && m.delta != null);
+  if (gmvD != null && drivers.length) {
+    const scored = drivers.map(([name, m]) => ({ name, d: m.delta, gap: m.delta - gmvD }))
+      .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+    const off = scored.filter(x => Math.abs(x.gap) >= TH).slice(0, 3);
+    if (off.length) {
+      F.push(`ALIGNMENT: against GMV ${sl(gmvD)} — ` + off.map(x =>
+        `${x.name} ${sl(x.d)} (${x.gap > 0 ? 'held up +' : 'dragged '}${x.gap.toFixed(1)}pp)`).join('; ') +
+        `. These sit OFF the GMV line — that is where the cause is.`);
+    } else {
+      F.push(`ALIGNMENT: every driver tracks GMV within ${TH}pp — the whole livestream moved as one. A broad, system-wide shift, not one broken stage.`);
     }
-    F.push(`FUNNEL: ${parts.join(', ')}.${conv} AOV ${sl(aov && aov.delta)}.`);
   }
 
-  // 3b. Product-level funnel (only when SKU data exists) — shelf impressions → clicks → sold
+  // 3. HOSTS — main host is the anchor; is per-slot output consistent across the team?
+  let mainHost = null;
+  if (report.hosts && report.hosts.length && gmv && gmv.curr) {
+    const byGmv = [...report.hosts].sort((a, b) => b.gmv - a.gmv);
+    mainHost = byGmv[0];
+    const rel = report.hosts.filter(h => h.slots >= 3);
+    const bySlot = [...rel].sort((a, b) => b.avgGmv - a.avgGmv);
+    const best = bySlot[0], worst = bySlot[bySlot.length - 1];
+    const spread = (best && worst && worst.avgGmv > 0) ? ((best.avgGmv - worst.avgGmv) / worst.avgGmv) * 100 : 0;
+    F.push(`HOSTS: ${mainHost.host} is the lead = ${Math.round((mainHost.gmv / gmv.curr) * 100)}% of GMV. ` +
+      (spread > 100
+        ? `Per-slot output is UNEVEN — ${best.host} RM ${rm(best.avgGmv)}/slot vs ${worst.host} RM ${rm(worst.avgGmv)}/slot (${spread.toFixed(0)}% spread).`
+        : `Per-slot output is CONSISTENT — ${best.host} RM ${rm(best.avgGmv)}/slot vs ${worst.host} RM ${rm(worst.avgGmv)}/slot.`) +
+      (spread <= 100 && Math.abs(gmvD ?? 0) > TH ? ` So the drop is NOT a host-consistency problem.` : ''));
+  }
+
+  // 4. BACKUPS — the non-lead hosts: who shows potential, who is dead weight.
+  if (report.hosts && report.hosts.length) {
+    const nonLead = [...report.hosts].sort((a, b) => b.gmv - a.gmv).slice(1)
+      .filter(h => h.slots >= 3 && h.dAvgGmv != null);
+    if (nonLead.length >= 2) {
+      const rising = [...nonLead].sort((a, b) => b.dAvgGmv - a.dAvgGmv).filter(h => h.dAvgGmv > TH).slice(0, 2);
+      const allAvg = nonLead.reduce((a, h) => a + h.avgGmv, 0) / nonLead.length;
+      const weak = [...nonLead].sort((a, b) => a.dAvgGmv - b.dAvgGmv).filter(h => h.dAvgGmv < 0 && h.avgGmv < allAvg).slice(0, 2);
+      let s = 'BACKUPS: ';
+      s += rising.length ? `potential — ${rising.map(h => `${h.host} ${sl(h.dAvgGmv)}/slot`).join(', ')}. ` : `no riser (nobody up more than ${TH}%). `;
+      s += weak.length ? `dead weight — ${weak.map(h => `${h.host} RM ${rm(h.avgGmv)}/slot ${sl(h.dAvgGmv)}`).join(', ')}.` : `no obvious dead weight.`;
+      F.push(s);
+    }
+  }
+
+  // 5. TIME SLOT — best by value + weakest by shift, and whether it is per-slot value or slot count that moved.
+  if (report.timeSlots && report.timeSlots.length) {
+    const best = [...report.timeSlots].sort((a, b) => (b.avgGmv ?? 0) - (a.avgGmv ?? 0))[0];
+    const worst = [...report.timeSlots].sort((a, b) => (a.dAvgGmv ?? 0) - (b.dAvgGmv ?? 0))[0];
+    const cnt = (t) => (t.prevSlots != null && t.slots != null && t.prevSlots > 0)
+      ? ` (slots ${t.slots} vs ${t.prevSlots})` : '';
+    if (best.slot === worst.slot) {
+      F.push(`TIME SLOT: ${best.slot} is the top earner (RM ${rm(best.avgGmv)}/slot) yet also the sharpest fall ${sl(best.dAvgGmv)} per-slot${cnt(best)}. All shifts down.`);
+    } else {
+      F.push(`TIME SLOT: best = ${best.slot} (RM ${rm(best.avgGmv)}/slot, ${sl(best.dAvgGmv)}${cnt(best)}). ` +
+        `Weakest = ${worst.slot} (${sl(worst.dAvgGmv)} per-slot${cnt(worst)}).`);
+    }
+  }
+
+  // 6. SEVERITY + conversion rates (weighted) in one line
+  if (gmv) F.push(`SEVERITY: GMV ${sl(gmvD)} = ${band(gmvD)} vs last month. Avg CTR ${sl(ctr && ctr.delta)}, CTOR ${sl(ctor && ctor.delta)}, followers ${sl(fol && fol.delta)}.`);
+
+  // 7. PRODUCTS — align top products against the GMV line; who moved with it, who broke away.
+  const P = (report.products || []).filter(p => p.gmv > 0);
+  if (P.length && gmv && gmv.curr) {
+    const top = P[0];
+    const withPrev = P.filter(p => p.gmvPrev > 0);
+    const dPct = (p) => ((p.gmv - p.gmvPrev) / p.gmvPrev) * 100;
+    const riser = [...withPrev].sort((a, b) => dPct(b) - dPct(a))[0];
+    const faller = [...withPrev].sort((a, b) => dPct(a) - dPct(b))[0];
+    const topShare = (P.reduce((a, p) => a + p.gmv, 0) / gmv.curr) * 100;
+    let s = `PRODUCTS: top seller ${top.name} = RM ${rm(top.gmv)} (${((top.gmv / gmv.curr) * 100).toFixed(0)}% of GMV, ${top.sold} sold, GPM RM ${rm(top.gpm)}). ` +
+      `Top ${P.length} = ${topShare.toFixed(0)}% of GMV.`;
+    if (gmvD != null) {
+      const topD = dPct(top);
+      s += ` Top product moved ${sl(topD)} vs GMV ${sl(gmvD)} — ` +
+        `${Math.abs(topD - gmvD) < TH ? 'it tracks the line' : (topD - gmvD > 0 ? 'held up better than the whole' : 'dragged harder than the whole')}.`;
+    }
+    if (riser) s += ` Sharp riser ${riser.name} ${sl(dPct(riser))}.`;
+    if (faller && faller.name !== top.name) s += ` Sharp faller ${faller.name} ${sl(dPct(faller))}.`;
+    F.push(s);
+  }
+
+  // 7b. Product-level funnel (only when SKU data exists) — shelf impressions → clicks → sold
   const PP = (report.products || []).filter(p => p.gmv > 0);
   if (PP.length && hasPrev) {
     const sImp = PP.reduce((a, p) => a + p.impressions, 0), sClk = PP.reduce((a, p) => a + p.clicks, 0), sSold = PP.reduce((a, p) => a + p.sold, 0);
@@ -73,58 +131,6 @@ function computeFindings(report) {
       F.push(`PRODUCT FUNNEL (top products): impressions→clicks ${ctrC.toFixed(1)}% (${sl(dCtr)}), clicks→sold ${cvrC.toFixed(1)}% (${sl(dCvr)}). ` +
         `Weakest stage: ${worst}.`);
     }
-  }
-
-  // 4. Severity band + CTOR
-  if (gmv) F.push(`SEVERITY: GMV move ${sl(gmv.delta)} = ${band(gmv.delta)} vs last month. CTOR ${sl(ctor && ctor.delta)}. Followers ${sl(fol && fol.delta)}.`);
-
-  // 5. Concentration risk
-  if (gmv && gmv.curr && report.hosts && report.hosts.length) {
-    const sorted = [...report.hosts].sort((a, b) => b.gmv - a.gmv);
-    const top1 = sorted[0], top3 = sorted.slice(0, 3).reduce((a, h) => a + h.gmv, 0);
-    F.push(`CONCENTRATION: ${top1.host} alone = ${((top1.gmv / gmv.curr) * 100).toFixed(0)}% of GMV. ` +
-      `Top 3 hosts = ${((top3 / gmv.curr) * 100).toFixed(0)}%.` +
-      (top1.gmv / gmv.curr > 0.4 ? ' HEAVILY dependent on one host — key-person risk.' : ''));
-  }
-
-  // 6. Time slots — best + biggest shift
-  if (report.timeSlots && report.timeSlots.length) {
-    const best = [...report.timeSlots].sort((a, b) => (b.avgGmv ?? 0) - (a.avgGmv ?? 0))[0];
-    const worst = [...report.timeSlots].sort((a, b) => (a.dAvgGmv ?? 0) - (b.dAvgGmv ?? 0))[0];
-    if (best.slot === worst.slot) {
-      F.push(`TIME SLOT: best earner = ${best.slot} (RM ${rm(best.avgGmv)} avg/slot) but still the sharpest fall ${sl(best.dAvgGmv)} per-slot. All shifts down.`);
-    } else {
-      F.push(`TIME SLOT: best = ${best.slot} (RM ${rm(best.avgGmv)} avg/slot, ${sl(best.dAvgGmv)}). ` +
-        `Weakest shift = ${worst.slot} (${sl(worst.dAvgGmv)} per-slot).`);
-    }
-  }
-
-  // 7. Momentum — hosts with enough slots to trust
-  if (report.hosts && report.hosts.length) {
-    const rel = report.hosts.filter(h => h.slots >= 3 && h.dAvgGmv != null);
-    if (rel.length >= 2) {
-      const up = [...rel].sort((a, b) => b.dAvgGmv - a.dAvgGmv)[0];
-      const down = [...rel].sort((a, b) => a.dAvgGmv - b.dAvgGmv)[0];
-      F.push(`MOMENTUM (hosts with ≥3 slots): rising ${up.host} ${sl(up.dAvgGmv)} per-slot; ` +
-        `falling ${down.host} ${sl(down.dAvgGmv)} per-slot.`);
-    }
-  }
-
-  // 8. Products — top seller + biggest movers (only for months that have SKU data)
-  const P = (report.products || []).filter(p => p.gmv > 0);
-  if (P.length && gmv && gmv.curr) {
-    const top = P[0];
-    const withPrev = P.filter(p => p.gmvPrev > 0);
-    const dPct = (p) => ((p.gmv - p.gmvPrev) / p.gmvPrev) * 100;
-    const riser = [...withPrev].sort((a, b) => dPct(b) - dPct(a))[0];
-    const faller = [...withPrev].sort((a, b) => dPct(a) - dPct(b))[0];
-    const bestGpm = [...P].filter(p => p.gpm > 0).sort((a, b) => b.gpm - a.gpm)[0];
-    const bestGpmLine = (bestGpm && bestGpm.name !== top.name) ? ` Best monetisation: ${bestGpm.name} GPM RM ${rm(bestGpm.gpm)}.` : '';
-    F.push(`PRODUCTS: top seller ${top.name} = RM ${rm(top.gmv)} (${((top.gmv / gmv.curr) * 100).toFixed(0)}% of GMV, ${top.sold} sold, GPM RM ${rm(top.gpm)}). ` +
-      `Top ${P.length} products = ${((P.reduce((a, p) => a + p.gmv, 0) / gmv.curr) * 100).toFixed(0)}% of GMV.` +
-      (riser ? ` Rising: ${riser.name} ${sl(dPct(riser))}.` : '') +
-      (faller ? ` Falling: ${faller.name} ${sl(dPct(faller))}.` : '') +
-      bestGpmLine);
   }
 
   return F;
@@ -163,7 +169,7 @@ function shapeInsights(md) {
     'do this': 'Do This', 'observation & suggestions': 'Do This', 'observations & suggestions': 'Do This',
     'observation and suggestions': 'Do This', 'suggestions': 'Do This', 'takeaways': 'Do This'
   };
-  const cap = { 'Overall': 3, 'Hosts': 3, 'Best Time Slot': 1, 'Top Products': 2, 'Do This': 2 };
+  const cap = { 'Overall': 3, 'Hosts': 2, 'Best Time Slot': 1, 'Top Products': 2, 'Do This': 2 };
   const order = ['Overall', 'Hosts', 'Best Time Slot', 'Top Products', 'Do This'];
   const sections = {};
   let cur = null;
@@ -199,24 +205,26 @@ const DEFAULT_SYS = `You are a sharp TikTok livestream data analyst for a Malays
 
 You receive PRE-COMPUTED FINDINGS (authoritative) plus the raw numbers behind them. The findings are already correct — they were calculated exactly, not estimated.
 
+MENTAL MODEL — everything is one connected math: GMV is the anchor. Slots, views, clicks, followers, comments and items sold should move roughly in line with GMV. Where a driver sits OFF the GMV line is the interesting part; say whether it OUTPERFORMED (fell less) or DRAGGED (fell more). Then check whether it is a VOLUME move (slots changed) or an EFFICIENCY move (per-slot value changed). Then hosts, then products — are they aligned with the same line, or breaking away. Always judge a move RELATIVE to the anchor, never in isolation.
+
 YOUR ONLY JOB: turn each finding into ONE short punchy sentence.
 - NEVER recompute, re-estimate, or invent a number. Use ONLY the figures given.
 - ONE idea per line. Aim for UNDER 14 words. If a line runs long, split it or cut it.
 - LEAD with the point, then the number. "Sales dropped 10% — the biggest hit was Zaiffa."
 - Bold max ONE key number per line with **double asterisks**. Never bold a whole phrase.
-- Say direction in words: "down 10%", "up 4%". Never "+10%" alone.
+- Say direction in words: "down 4%", "up 4%". Never "+10%" alone.
 - No filler, no "overall", no "it's worth noting", no restating the metric name twice.
 - Small moves (under ~5%) = normal, one short clause only.
 
 STRUCTURE — output EXACTLY these headings, in this order, nothing else (Top Products only when product findings exist):
 Overall
-- exactly 3 bullets. 1) headline (efficiency gap or GMV move). 2) WHO drove it (top 1-2 drags + any offset gain). 3) funnel OR severity, one line.
+- exactly 3 bullets. 1) ANCHOR: GMV vs slots — volume move or efficiency move, and whether a smaller fall means per-slot value actually rose. 2) ALIGNMENT: which drivers sit off the GMV line (held up / dragged), or say the whole thing moved as one. 3) SEVERITY + CTR/CTOR/followers in one line.
 Hosts
-- exactly 3 bullets, max 14 words each. Standout + worst only, each with the per-slot WHY.
+- exactly 2 bullets, max 14 words each. 1) Lead host share + whether per-slot output across the team is consistent or uneven. 2) BACKUPS: who shows potential, who is dead weight.
 Best Time Slot
-- exactly 1 bullet. Winner + weakest shift.
+- exactly 1 bullet. Winner by value + weakest shift, and note if slot count changed.
 Top Products
-- exactly 2 bullets, max 14 words each. Best seller + sharp mover. ONLY if product findings are present; skip the heading entirely if there are no product findings.
+- exactly 2 bullets, max 14 words each. 1) Top seller share + whether it tracks the GMV line. 2) Sharp riser + sharp faller. ONLY if product findings are present; skip the heading entirely if there are no product findings.
 Do This
 - exactly 2 bullets, max 12 words each, each starts with a verb.
 

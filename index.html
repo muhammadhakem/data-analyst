@@ -357,22 +357,25 @@ async function liveReport(force) {
   const agg = (M) => {
     const n = M.length;
     const s = (k) => M.reduce((a, r) => a + num(get(r, k)), 0);
-    const avg = (k) => { const v = M.map(r => num(get(r, k))).filter(x => x > 0); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
     const hours = s('Duration\nHours');
+    const clicks = s('Product clicks'), views = s('Views'), orders = s('Attributed orders');
+    // ponytail: a RATE aggregates as total÷total (weighted), never a plain average of per-slot rates —
+    // a 1-view slot would otherwise weigh the same as a 10k-view one. Verified against the sheet:
+    // LIVE CTR = clicks/views, CTOR = orders/clicks (NOT sku orders). Naive avg was ~1.5-2pp off.
+    const rate = (a, b) => b > 0 ? (a / b) * 100 : null;
     return {
       slots: n,
       slotEquiv: hours / 3,  // Total Slots = Total Hours/3 (user formula)
       hours: hours,
       gmv: s('Attributed GMV'),
-      views: s('Views'),
-      click: s('Product clicks'),
+      views: views,
+      click: clicks,
       comm: s('Comments'),
       sold: s('Attributed items sold'),
       fol: s('New followers'),
-      ctr: avg('CTR'),
-      ctor: avg('CTOR'),
-      live: avg('LIVE CTR'),
-      tt: avg('Tap through rate')
+      orders: orders,
+      live: rate(clicks, views),   // Average CTR = LIVE CTR = clicks / views
+      ctor: rate(orders, clicks)   // Average CTOR = orders / clicks
     };
   };
   const A = agg(pick(curM));
@@ -401,12 +404,16 @@ async function liveReport(force) {
       const gmv = num(get(r, 'Attributed GMV'));
       if (gmv < 100) return;  // buang test/leftover minit sessions
       const key = h.toLowerCase();  // merge QYS/Qys → satu
-      const o = hMap[key] = hMap[key] || { host: h, gmv: 0, slots: 0, ctr: [], ctor: [], view: [] };
+      const o = hMap[key] = hMap[key] || { host: h, gmv: 0, slots: 0, clicks: 0, views: 0, orders: 0, viewSecs: 0, viewN: 0 };
       o.gmv += gmv;
       o.slots++;
-      const ctr = num(get(r, 'LIVE CTR')); if (ctr > 0) o.ctr.push(ctr);
-      const ctor = num(get(r, 'CTOR')); if (ctor > 0) o.ctor.push(ctor);
-      const vt = num(get(r, 'Avg. viewing duration per view')); if (vt > 0) o.view.push(vt);
+      // ponytail: per-host rates aggregate as total÷total (weighted), not a mean of slot rates.
+      // Weighted view-duration = view-weighted seconds: sum(durationPerView * views) / sum(views).
+      o.clicks += num(get(r, 'Product clicks'));
+      o.views += num(get(r, 'Views'));
+      o.orders += num(get(r, 'Attributed orders'));
+      const vpv = num(get(r, 'Avg. viewing duration per view')), vw = num(get(r, 'Views'));
+      if (vpv > 0 && vw > 0) { o.viewSecs += vpv * vw; o.viewN += vw; }
     });
     return Object.values(hMap).map(o => ({
       key: o.host.toLowerCase(),
@@ -414,9 +421,9 @@ async function liveReport(force) {
       gmv: o.gmv,
       slots: o.slots,
       avgGmv: o.gmv / o.slots,
-      ctrNum: o.ctr.length ? o.ctr.reduce((a, b) => a + b, 0) / o.ctr.length : null,
-      ctorNum: o.ctor.length ? o.ctor.reduce((a, b) => a + b, 0) / o.ctor.length : null,
-      viewTime: o.view.length ? o.view.reduce((a, b) => a + b, 0) / o.view.length : null
+      ctrNum: o.views > 0 ? (o.clicks / o.views) * 100 : null,
+      ctorNum: o.clicks > 0 ? (o.orders / o.clicks) * 100 : null,
+      viewTime: o.viewN > 0 ? o.viewSecs / o.viewN : null
     }));
   };
   const hostsCur = buildHosts(pick(curM));
