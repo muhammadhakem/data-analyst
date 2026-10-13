@@ -327,12 +327,20 @@ function toggleSidebar() {
 }
 
 async function liveReport(force) {
-  const res = await fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(activeAccount.spreadsheetId)}&sheet=${encodeURIComponent(activeAccount.sheetName)}&t=${Date.now()}`);
+  const sid = encodeURIComponent(activeAccount.spreadsheetId);
+  const [res, skuRes, setupRes] = await Promise.all([
+    fetch(`/api/sheet?spreadsheetId=${sid}&sheet=${encodeURIComponent(activeAccount.sheetName)}&t=${Date.now()}`),
+    fetch(`/api/sheet?spreadsheetId=${sid}&sheet=${encodeURIComponent(activeAccount.skuSheet)}&t=${Date.now()}`),
+    fetch(`/api/sheet?spreadsheetId=${sid}&sheet=Setup&t=${Date.now()}`)
+  ]);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || 'fetch failed');
+  const sku = await skuRes.json().catch(() => ({}));
+  const setup = await setupRes.json().catch(() => ({}));
 
-  // Dirty-check: render hanya bila data berubah (skip bila force=true)
-  const sig = JSON.stringify(data);
+  // Dirty-check: SKU + Setup masuk signature juga. Kalau signature = Raw je, update pada
+  // SKU Data (contoh tambah produk) takkan reflect sampai Raw Data pun berubah atau tekan refresh.
+  const sig = JSON.stringify([data, sku, setup]);
   if (!force && sig === lastSig) return 'unchanged';
   lastSig = sig;
 
@@ -527,10 +535,6 @@ const ymd = (d) => d.toISOString().slice(0, 10);
   let products = [];
   let skuStats = null;  // SKU tab's own monthly GMV total — kept separate from Raw Data GMV
   try {
-    const [sku, setup] = await Promise.all([
-      fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(activeAccount.spreadsheetId)}&sheet=${encodeURIComponent(activeAccount.skuSheet)}&t=${Date.now()}`).then(r => r.json()),
-      fetch(`/api/sheet?spreadsheetId=${encodeURIComponent(activeAccount.spreadsheetId)}&sheet=Setup&t=${Date.now()}`).then(r => r.json())
-    ]);
     // image map: Setup row → col 6 = PID, col 9 = image URL
     const imgMap = {};
     (setup.rows || []).forEach(r => {
