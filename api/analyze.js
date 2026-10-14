@@ -261,7 +261,8 @@ function scrub(s) {
     const map = { delve:'dig', crucial:'key', pivotal:'key', vital:'key', robust:'strong', leverage:'use', leveraging:'using', seamless:'smooth', holistic:'full', landscape:'picture', testament:'proof', underscore:'show', underscores:'shows', underscoring:'showing', showcase:'show', showcasing:'showing', foster:'drive', fostering:'driving', elevate:'lift', navigate:'handle', unpack:'explain', 'game-changer':'big change', ultimately:'', essentially:'' };
     return map[m.toLowerCase()] ?? m;
   });
-  t = t.replace(/\s*[—–]\s*/g, ', ');   // em/en dash → comma (humanizer pattern 14); full stop made fragments
+  t = t.replace(/\s*[—–‐]\s*/g, ', ');   // em/en/unicode dash → comma (humanizer pattern 14)
+  t = t.replace(/\s*→\s*/g, ' to ');      // LLM arrow → plain word
   t = t.replace(/\s{2,}/g, ' ').replace(/\s+([.,;:])/g, '$1').replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').trim();
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
