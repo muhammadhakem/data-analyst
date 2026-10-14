@@ -19,6 +19,11 @@ function computeFindings(report) {
   const gmvD = gmv && gmv.delta != null ? gmv.delta : null;
   const TH = 5; // pp threshold: within this, two deltas are "in line"
 
+  const drivers = [
+    ['Total Views', views], ['Product Clicks', clicks], ['Items Sold', sold],
+    ['New Followers', fol], ['Comments', comm], ['Total Slots', slots]
+  ].filter(([, m]) => m && m.delta != null);
+
   // 1. ANCHOR — GMV vs slots, the efficiency reframe (Akiem's core rule).
   // A driver that fell LESS than GMV actually OUTPERFORMED; the gap is the real story, not the raw drop.
   if (gmv && slots && gmvD != null && slots.delta != null) {
@@ -30,11 +35,24 @@ function computeFindings(report) {
     F.push(`ANCHOR: GMV ${sl(gmvD)} vs slots ${sl(slots.delta)}. Avg GMV/slot ${sl(perSlot && perSlot.delta)}. ${read}`);
   }
 
+  // 1b. CASCADE — decompose the GMV move: how much is VOLUME (slot count) vs EFFICIENCY (per-slot value),
+  // then name the driver that moved WITH GMV (the mechanism) and the one that broke away hardest (the cause).
+  if (gmv && slots && gmvD != null && slots.delta != null && hasPrev) {
+    const effPart = gmvD - slots.delta;       // the share NOT explained by slot count → per-slot
+    const drv = drivers.filter(([n]) => n !== 'Total Slots');
+    let mech = null, brk = null;
+    if (drv.length) {
+      const byFit = [...drv].sort((a, b) => Math.abs(a[1].delta - gmvD) - Math.abs(b[1].delta - gmvD));
+      mech = byFit[0];
+      brk = [...drv].sort((a, b) => Math.abs(b[1].delta - gmvD) - Math.abs(a[1].delta - gmvD))[0];
+    }
+    let s = `CASCADE: GMV moved ${sl(gmvD)}; slot count explains ${sl(slots.delta)} of that, the other ${effPart.toFixed(1)}pp is per-slot EFFICIENCY.`;
+    if (mech) s += ` The driver tracking GMV closest is ${mech[0]} ${sl(mech[1].delta)} — that is the mechanism.`;
+    if (brk && Math.abs(brk[1].delta - gmvD) >= TH) s += ` The one breaking away hardest is ${brk[0]} ${sl(brk[1].delta)} (${(brk[1].delta - gmvD) > 0 ? 'held up' : 'dragged'} ${Math.abs(brk[1].delta - gmvD).toFixed(1)}pp) — dig here on why.`;
+    F.push(s);
+  }
+
   // 2. ALIGNMENT — every driver vs the GMV line. Off-line drivers are where to dig.
-  const drivers = [
-    ['Total Views', views], ['Product Clicks', clicks], ['Items Sold', sold],
-    ['New Followers', fol], ['Comments', comm], ['Total Slots', slots]
-  ].filter(([, m]) => m && m.delta != null);
   if (gmvD != null && drivers.length) {
     const scored = drivers.map(([name, m]) => ({ name, d: m.delta, gap: m.delta - gmvD }))
       .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
@@ -62,6 +80,22 @@ function computeFindings(report) {
         ? `Per-slot output is UNEVEN — ${best.host} RM ${rm(best.avgGmv)}/slot vs ${worst.host} RM ${rm(worst.avgGmv)}/slot (${spread.toFixed(0)}% spread).`
         : `Per-slot output is CONSISTENT — ${best.host} RM ${rm(best.avgGmv)}/slot vs ${worst.host} RM ${rm(worst.avgGmv)}/slot.`) +
       (spread <= 100 && Math.abs(gmvD ?? 0) > TH ? ` So the drop is NOT a host-consistency problem.` : ''));
+
+    // 3b. HOST EFFICIENCY — do the hosts convert? LIVE CTR (clicks/views) and CTOR (orders/clicks),
+    // weighted from raw totals. A host can hold GMV but leak at CTR/CTOR, or vice versa.
+    const withConv = report.hosts.filter(h => h.ctrNum != null && h.ctorNum != null);
+    if (withConv.length >= 2) {
+      const bestCtr = [...withConv].sort((a, b) => b.ctrNum - a.ctrNum)[0];
+      const bestCtor = [...withConv].sort((a, b) => b.ctorNum - a.ctorNum)[0];
+      // host whose conversion moved hardest vs the rest — the lever inside the team
+      const withDelta = withConv.filter(h => h.dCtr != null || h.dCtor != null);
+      const dropping = [...withDelta].sort((a, b) => Math.min(a.dCtr ?? 0, a.dCtor ?? 0) - Math.min(b.dCtr ?? 0, b.dCtor ?? 0))[0];
+      let s = `HOST CONVERSION: best LIVE CTR ${bestCtr.host} ${bestCtr.ctrNum.toFixed(1)}%${bestCtr.dCtr != null ? ` (${sl(bestCtr.dCtr)})` : ''}, ` +
+        `best CTOR ${bestCtor.host} ${bestCtor.ctorNum.toFixed(2)}%${bestCtor.dCtor != null ? ` (${sl(bestCtor.dCtor)})` : ''}.`;
+      if (dropping && Math.min(dropping.dCtr ?? 0, dropping.dCtor ?? 0) < -TH)
+        s += ` Watch ${dropping.host} — conversion slipping (CTR ${sl(dropping.dCtr)}, CTOR ${sl(dropping.dCtor)}).`;
+      F.push(s);
+    }
   }
 
   // 4. BACKUPS — the non-lead hosts: who shows potential, who is dead weight.
@@ -174,7 +208,7 @@ function shapeInsights(md) {
     'do this': 'Do This', 'observation & suggestions': 'Do This', 'observations & suggestions': 'Do This',
     'observation and suggestions': 'Do This', 'suggestions': 'Do This', 'takeaways': 'Do This'
   };
-  const cap = { 'Overall': 3, 'Hosts': 2, 'Best Time Slot': 1, 'Top Products': 2, 'Do This': 2 };
+  const cap = { 'Overall': 3, 'Hosts': 3, 'Best Time Slot': 1, 'Top Products': 2, 'Do This': 2 };
   const order = ['Overall', 'Hosts', 'Best Time Slot', 'Top Products', 'Do This'];
   const sections = {};
   let cur = null;
@@ -254,7 +288,7 @@ STRUCTURE — output EXACTLY these headings, in this order, nothing else (Top Pr
 Overall
 - exactly 3 bullets. 1) ANCHOR: GMV vs slots, volume or efficiency move, and whether a smaller fall means per-slot value actually rose. 2) ALIGNMENT: which drivers sit off the GMV line (held up / dragged), or that everything moved as one. 3) SEVERITY, plus CTR/CTOR/followers in one line.
 Hosts
-- exactly 2 bullets, max 14 words each. 1) Lead host share, and whether per-slot output across the team is consistent or uneven. 2) BACKUPS: who shows potential, who is dead weight.
+- exactly 3 bullets, max 14 words each. 1) Lead host share, and whether per-slot output across the team is consistent or uneven. 2) Conversion: best LIVE CTR and best CTOR among hosts. 3) BACKUPS: who shows potential, who is dead weight.
 Best Time Slot
 - exactly 1 bullet. Winner by value and the weakest shift, plus whether the slot count changed.
 Top Products
