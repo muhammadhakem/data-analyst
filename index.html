@@ -951,7 +951,9 @@ document.addEventListener('click', (e) => {
   loadAccountReport(true);
 });
 // Fast poll: 3s auto-refresh, render hanya bila data berubah (dirty-check)
-setInterval(loadAccountReport, 3000);
+// ponytail: 3 sheets per tick. 3s tick = 60 req/min = exactly the Sheets API per-minute quota
+// (60 read requests/min/user) → blew it, page fell back to stale data. 20s = 9 req/min, safe.
+setInterval(loadAccountReport, 20000);
 </script>
 </body>
 </html>
