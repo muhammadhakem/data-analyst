@@ -333,7 +333,7 @@ export default async function handler(req, res) {
       ...report.overall.map(m => `  - ${m.metric} ${n2(m.curr)} | prev ${n2(m.prev)} | ${pct(m.delta)}`),
       `  HOSTS:`,
       ...report.hosts.slice(0, 10).map(h =>
-        `    ${h.host}: GMV ${n2(h.gmv)} (prev ${n2(h.prevGmv)}, ${pct(h.dGmv)}) | slots ${h.slots} (prev ${h.prevSlots ?? '—'}, ${pct(h.dSlots)}) | avg/slot ${n2(h.avgGmv)} (${pct(h.dAvgGmv)})`
+        `    ${h.host}: GMV ${n2(h.gmv)} (prev ${n2(h.prevGmv)}, ${pct(h.dGmv)}) | slots ${h.slots} (prev ${h.prevSlots ?? '—'}, ${pct(h.dSlots)}) | avg/slot ${n2(h.avgGmv)} (${pct(h.dAvgGmv)}) | LIVE CTR ${h.ctrNum != null ? h.ctrNum.toFixed(2) + '%' : '—'} (${pct(h.dCtr)}) | CTOR ${h.ctorNum != null ? h.ctorNum.toFixed(2) + '%' : '—'} (${pct(h.dCtor)})`
       ),
       `  TIME SLOTS:`,
       ...report.timeSlots.map(t =>
