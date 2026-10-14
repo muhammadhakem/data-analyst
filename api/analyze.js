@@ -179,6 +179,35 @@ function computeFindings(report) {
   return F;
 }
 
+// ponytail: when the free LLM returns nothing, group the deterministic findings under the same
+// headings so the panel still reads as sections. One lookup table, no cleverness.
+function groupFindings(findings) {
+  const where = (f) => {
+    const t = f.toUpperCase();
+    if (t.startsWith('ANCHOR') || t.startsWith('CASCADE') || t.startsWith('ALIGNMENT') || t.startsWith('SEVERITY')) return 'Overall Summary';
+    if (t.startsWith('HOSTS') || t.startsWith('HOST CONVERSION') || t.startsWith('BACKUPS')) return 'Host Summary';
+    if (t.startsWith('TIME SLOT')) return 'Best Time Summary';
+    if (t.startsWith('PRODUCT')) return 'Best Products Summary';
+    return 'Overall Summary';
+  };
+  const cap = { 'Overall Summary': 3, 'Host Summary': 3, 'Best Time Summary': 1, 'Best Products Summary': 2 };
+  const order = ['Overall Summary', 'Host Summary', 'Best Time Summary', 'Best Products Summary'];
+  const secs = {};
+  for (const f of findings) {
+    const k = where(f);
+    (secs[k] = secs[k] || []).push(f.replace(/^[A-Za-z ()/]+: /, ''));
+  }
+  const out = [];
+  for (const name of order) {
+    const items = (secs[name] || []).slice(0, cap[name]).map(scrub);
+    if (!items.length) continue;
+    out.push(name);
+    items.forEach(t => out.push('- ' + t));
+    out.push('');
+  }
+  return out.join('\n').trim();
+}
+
 // ── Supabase cache (firm per month-year) ──────────────────────────────────
 const SB_URL = process.env.SUPABASE_URL || '';
 const SB_KEY = process.env.SUPABASE_SERVICE_KEY || '';
@@ -206,14 +235,15 @@ async function sbPut(key, account, period, insights) {
 function shapeInsights(md) {
   if (!md) return md;
   const alias = {
-    'overall': 'Overall', 'hosts': 'Hosts', 'host': 'Hosts',
-    'best time slot': 'Best Time Slot', 'time slot': 'Best Time Slot', 'time slots': 'Best Time Slot',
-    'top products': 'Top Products', 'top product': 'Top Products', 'products': 'Top Products', 'product': 'Top Products', 'best products': 'Top Products',
+    'overall summary': 'Overall Summary', 'overall': 'Overall Summary',
+    'host summary': 'Host Summary', 'hosts': 'Host Summary', 'host': 'Host Summary',
+    'best time summary': 'Best Time Summary', 'best time slot': 'Best Time Summary', 'time slot': 'Best Time Summary', 'time slots': 'Best Time Summary',
+    'best products summary': 'Best Products Summary', 'top products': 'Best Products Summary', 'top product': 'Best Products Summary', 'products': 'Best Products Summary', 'product': 'Best Products Summary', 'best products': 'Best Products Summary',
     'do this': 'Do This', 'observation & suggestions': 'Do This', 'observations & suggestions': 'Do This',
     'observation and suggestions': 'Do This', 'suggestions': 'Do This', 'takeaways': 'Do This'
   };
-  const cap = { 'Overall': 3, 'Hosts': 3, 'Best Time Slot': 1, 'Top Products': 2, 'Do This': 2 };
-  const order = ['Overall', 'Hosts', 'Best Time Slot', 'Top Products', 'Do This'];
+  const cap = { 'Overall Summary': 3, 'Host Summary': 3, 'Best Time Summary': 1, 'Best Products Summary': 2, 'Do This': 2 };
+  const order = ['Overall Summary', 'Host Summary', 'Best Time Summary', 'Best Products Summary', 'Do This'];
   const sections = {};
   let cur = null;
   for (const raw of String(md).split('\n')) {
@@ -289,14 +319,14 @@ BANNED. These make it read like a machine wrote it. Never use: delve, crucial, p
 - No signposting ("Let's look at..."). No preamble, no closing line.
 - No generic upbeat ending. End on the last fact.
 
-STRUCTURE — output EXACTLY these headings, in this order, nothing else (Top Products only when product findings exist):
-Overall
+STRUCTURE — output EXACTLY these headings, in this order, nothing else (Best Products Summary only when product findings exist):
+Overall Summary
 - exactly 3 bullets. 1) ANCHOR: GMV vs slots, volume or efficiency move, and whether a smaller fall means per-slot value actually rose. 2) ALIGNMENT: which drivers sit off the GMV line (held up / dragged), or that everything moved as one. 3) SEVERITY, plus CTR/CTOR/followers in one line.
-Hosts
+Host Summary
 - exactly 3 bullets, max 14 words each. 1) Lead host share, and whether per-slot output across the team is consistent or uneven. 2) Conversion: best LIVE CTR and best CTOR among hosts. 3) BACKUPS: who shows potential, who is dead weight.
-Best Time Slot
+Best Time Summary
 - exactly 1 bullet. Winner by value and the weakest shift, plus whether the slot count changed.
-Top Products
+Best Products Summary
 - exactly 2 bullets, max 14 words each. 1) Top seller share within the SKU tab's OWN GMV, and whether products and sessions moved together or apart. 2) Sharp riser and sharp faller. Skip the heading if there are no product findings. The SKU tab and the Raw Data tab are SEPARATE sources; never imply their totals should match.
 Do This
 - exactly 2 bullets, max 12 words each. Each starts with a verb and names a concrete action (who or what to change), not a platitude.
@@ -370,10 +400,9 @@ export default async function handler(req, res) {
     }
 
     if (!insights) {
-      // Fallback: rule-based — reuse the deterministic findings (no LLM at all)
-      insights = findings.length
-        ? findings.map(f => '• ' + f.replace(/^[A-Z ]+: /, '')).join('\n')
-        : '• Insufficient data for analysis.';
+      // Fallback: no LLM. Group the deterministic findings under the same headings so the output
+      // still reads as sections, not one flat wall of bullets.
+      insights = findings.length ? groupFindings(findings) : '• Insufficient data for analysis.';
     }
 
     // Persist for this month-year so the analysis stays firm (only LLM output, not fallback)
