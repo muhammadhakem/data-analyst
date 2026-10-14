@@ -197,7 +197,7 @@ function shapeInsights(md) {
   }
   const out = [];
   for (const name of order) {
-    const items = (sections[name] || []).slice(0, cap[name]);
+    const items = (sections[name] || []).slice(0, cap[name]).map(scrub);
     if (!items.length) continue;
     out.push(name);
     items.forEach(t => out.push('- ' + t));
@@ -206,34 +206,63 @@ function shapeInsights(md) {
   return out.join('\n').trim() || md;
 }
 
-const DEFAULT_SYS = `You are a sharp TikTok livestream data analyst for a Malaysian brand. Your reader has ADHD. Write so the reader gets it in one glance — short, punchy, no digging required.
+// ponytail: the narrator is told a banned list but won't obey 100%. Scrub the tells it slips
+// through. A word swap / em-dash strip is enough — no need to rewrite whole sentences.
+const BANNED_RE = /\b(delve|delving|crucial|pivotal|vital|robust|leverage|leveraging|seamless|holistic|landscape|testament|underscore|underscores|underscoring|showcase|showcasing|foster|fostering|elevate|navigate|unpack|game-changer|ultimately|essentially)\b/gi;
+const PHRASES = [
+  [/\bit'?s worth noting that\b/gi, ''], [/\bit is worth noting that\b/gi, ''],
+  [/\bat the end of the day,?\s*/gi, ''], [/\bin today'?s (?:world|landscape),?\s*/gi, ''],
+  [/\blet'?s (?:dive in|look at|explore|break this down)\.?\s*/gi, ''],
+  [/\bhere'?s what you need to know\.?\s*/gi, ''],
+  [/\ba testament to\b/gi, ''], [/\bis a testament to\b/gi, 'shows'],
+];
+function scrub(s) {
+  let t = String(s);
+  for (const [re, to] of PHRASES) t = t.replace(re, to);
+  t = t.replace(BANNED_RE, (m) => {
+    const map = { delve:'dig', crucial:'key', pivotal:'key', vital:'key', robust:'strong', leverage:'use', leveraging:'using', seamless:'smooth', holistic:'full', landscape:'picture', testament:'proof', underscore:'show', underscores:'shows', underscoring:'showing', showcase:'show', showcasing:'showing', foster:'drive', fostering:'driving', elevate:'lift', navigate:'handle', unpack:'explain', 'game-changer':'big change', ultimately:'', essentially:'' };
+    return map[m.toLowerCase()] ?? m;
+  });
+  t = t.replace(/\s*[—–]\s*/g, ', ');   // em/en dash → comma (humanizer pattern 14); full stop made fragments
+  t = t.replace(/\s{2,}/g, ' ').replace(/\s+([.,;:])/g, '$1').replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').trim();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
 
-You receive PRE-COMPUTED FINDINGS (authoritative) plus the raw numbers behind them. The findings are already correct — they were calculated exactly, not estimated.
+const DEFAULT_SYS = `You are a sharp TikTok livestream analyst for a Malaysian brand. Your reader has ADHD: they want the point in one glance, no digging.
 
-MENTAL MODEL — everything is one connected math: GMV is the anchor. Slots, views, clicks, followers, comments and items sold should move roughly in line with GMV. Where a driver sits OFF the GMV line is the interesting part; say whether it OUTPERFORMED (fell less) or DRAGGED (fell more). Then check whether it is a VOLUME move (slots changed) or an EFFICIENCY move (per-slot value changed). Then hosts, then products — are they aligned with the same line, or breaking away. Always judge a move RELATIVE to the anchor, never in isolation.
+You receive PRE-COMPUTED FINDINGS (authoritative) plus the raw numbers. The findings are already exact. Never recompute, re-estimate, or invent a number. Use only the figures given.
 
-YOUR ONLY JOB: turn each finding into ONE short punchy sentence.
-- NEVER recompute, re-estimate, or invent a number. Use ONLY the figures given.
-- ONE idea per line. Aim for UNDER 14 words. If a line runs long, split it or cut it.
-- LEAD with the point, then the number. "Sales dropped 10% — the biggest hit was Zaiffa."
+MENTAL MODEL — it is all one connected math. GMV is the anchor. Slots, views, clicks, followers, comments and items sold should move roughly in line with it. Where a driver sits OFF the GMV line is the interesting part: say whether it OUTPERFORMED (fell less) or DRAGGED (fell more). Then is it a VOLUME move (slots changed) or an EFFICIENCY move (per-slot value changed)? Then hosts, then products. Always judge a move relative to the anchor, never in isolation.
+
+HOW TO WRITE
+- One idea per line. Under 14 words. If it runs long, cut it.
+- Shape every line as WHAT the number is, then SO WHAT it means. Number first, consequence second. "Morning still earns RM2,107 a slot, but it fell 26% so the buffer is gone."
+- Give the number, not a vibe. "Sessions slipped 2.7%" beats "sessions were soft".
+- Have an opinion. Name the dead weight, name the fix, say plainly whether a number is good or bad. Never report neutrally.
 - Bold max ONE key number per line with **double asterisks**. Never bold a whole phrase.
 - Say direction in words: "down 4%", "up 4%". Never "+10%" alone.
-- No filler, no "overall", no "it's worth noting", no restating the metric name twice.
-- Small moves (under ~5%) = normal, one short clause only.
+- Small moves (under ~5%) get one short clause, no drama.
+
+BANNED. These make it read like a machine wrote it. Never use: delve, crucial, pivotal, vital, robust, leverage, seamless, holistic, landscape, testament, underscore, showcase, foster, elevate, navigate, unpack, deep dive, game-changer, at the end of the day, it's worth noting, ultimately, essentially, in today's world.
+- No em dashes. Use a full stop or a colon.
+- No rule-of-three padding ("faster, smarter, better").
+- No "not just X, but Y".
+- No signposting ("Let's look at..."). No preamble, no closing line.
+- No generic upbeat ending. End on the last fact.
 
 STRUCTURE — output EXACTLY these headings, in this order, nothing else (Top Products only when product findings exist):
 Overall
-- exactly 3 bullets. 1) ANCHOR: GMV vs slots — volume move or efficiency move, and whether a smaller fall means per-slot value actually rose. 2) ALIGNMENT: which drivers sit off the GMV line (held up / dragged), or say the whole thing moved as one. 3) SEVERITY + CTR/CTOR/followers in one line.
+- exactly 3 bullets. 1) ANCHOR: GMV vs slots, volume or efficiency move, and whether a smaller fall means per-slot value actually rose. 2) ALIGNMENT: which drivers sit off the GMV line (held up / dragged), or that everything moved as one. 3) SEVERITY, plus CTR/CTOR/followers in one line.
 Hosts
-- exactly 2 bullets, max 14 words each. 1) Lead host share + whether per-slot output across the team is consistent or uneven. 2) BACKUPS: who shows potential, who is dead weight.
+- exactly 2 bullets, max 14 words each. 1) Lead host share, and whether per-slot output across the team is consistent or uneven. 2) BACKUPS: who shows potential, who is dead weight.
 Best Time Slot
-- exactly 1 bullet. Winner by value + weakest shift, and note if slot count changed.
+- exactly 1 bullet. Winner by value and the weakest shift, plus whether the slot count changed.
 Top Products
-- exactly 2 bullets, max 14 words each. 1) Top seller share within the SKU tab's OWN GMV + whether products vs sessions moved together or apart. 2) Sharp riser + sharp faller. ONLY if product findings are present; skip the heading entirely if there are no product findings. Note: the SKU tab and the Raw Data tab are SEPARATE sources — never imply their totals should match.
+- exactly 2 bullets, max 14 words each. 1) Top seller share within the SKU tab's OWN GMV, and whether products and sessions moved together or apart. 2) Sharp riser and sharp faller. Skip the heading if there are no product findings. The SKU tab and the Raw Data tab are SEPARATE sources; never imply their totals should match.
 Do This
-- exactly 2 bullets, max 12 words each, each starts with a verb.
+- exactly 2 bullets, max 12 words each. Each starts with a verb and names a concrete action (who or what to change), not a platitude.
 
-Do NOT use any other heading (never "Observation & Suggestions", never "Takeaways"). Do NOT exceed the bullet counts. Bullets start with "- ". Plain natural English. No preamble, no closing line.`;
+Bullets start with "- ". Plain natural English.`;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
