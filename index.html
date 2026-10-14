@@ -326,17 +326,30 @@ function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
 }
 
+let skuCache = null, setupCache = null, skuFetchedAt = 0;
 async function liveReport(force) {
   const sid = encodeURIComponent(activeAccount.spreadsheetId);
-  const [res, skuRes, setupRes] = await Promise.all([
-    fetch(`/api/sheet?spreadsheetId=${sid}&sheet=${encodeURIComponent(activeAccount.sheetName)}&t=${Date.now()}`),
-    fetch(`/api/sheet?spreadsheetId=${sid}&sheet=${encodeURIComponent(activeAccount.skuSheet)}&t=${Date.now()}`),
-    fetch(`/api/sheet?spreadsheetId=${sid}&sheet=Setup&t=${Date.now()}`)
-  ]);
+  // Raw Data drives the whole dashboard → fetch every tick (1 request).
+  const res = await fetch(`/api/sheet?spreadsheetId=${sid}&sheet=${encodeURIComponent(activeAccount.sheetName)}&t=${Date.now()}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || 'fetch failed');
-  const sku = await skuRes.json().catch(() => ({}));
-  const setup = await setupRes.json().catch(() => ({}));
+
+  // SKU + Setup change rarely → fetch at most once per 30s (else reuse cache), so the poll stays at
+  // 1 request/tick. Fetching all 3 every 3s hit the Sheets 60 req/min quota → page fell back to stale data.
+  const stale = force || !skuCache || (Date.now() - skuFetchedAt > 30000);
+  if (stale) {
+    try {
+      const [skuRes, setupRes] = await Promise.all([
+        fetch(`/api/sheet?spreadsheetId=${sid}&sheet=${encodeURIComponent(activeAccount.skuSheet)}&t=${Date.now()}`).then(r => r.json()),
+        fetch(`/api/sheet?spreadsheetId=${sid}&sheet=Setup&t=${Date.now()}`).then(r => r.json())
+      ]);
+      if (skuRes && skuRes.cols) skuCache = skuRes;
+      if (setupRes && setupRes.cols) setupCache = setupRes;
+      skuFetchedAt = Date.now();
+    } catch (e) { /* keep last good SKU cache */ }
+  }
+  const sku = skuCache || {};
+  const setup = setupCache || {};
 
   // Dirty-check: SKU + Setup masuk signature juga. Kalau signature = Raw je, update pada
   // SKU Data (contoh tambah produk) takkan reflect sampai Raw Data pun berubah atau tekan refresh.
@@ -708,7 +721,7 @@ async function loadAccountReport(force) {
   const btn = document.getElementById('refresh-btn');
   const container = document.getElementById('report-view-container');
 
-  let report = activeAccount.fallbackData;
+  let report = lastReport || activeAccount.fallbackData;
   let changed = true;
   try {
     if (activeAccount.spreadsheetId) {
@@ -717,7 +730,10 @@ async function loadAccountReport(force) {
       if (live) report = live;
     }
   } catch (e) {
-    console.warn('Live fetch failed, using fallback', e);
+    // Live fetch failed (network/quota). Keep the last good live report if we have one —
+    // re-rendering the hardcoded fallback on every hiccup is what makes the page look broken.
+    console.warn('Live fetch failed, keeping last good report', e);
+    if (lastReport) { changed = false; return; }
   }
   if (!changed) return;
 
@@ -951,9 +967,8 @@ document.addEventListener('click', (e) => {
   loadAccountReport(true);
 });
 // Fast poll: 3s auto-refresh, render hanya bila data berubah (dirty-check)
-// ponytail: 3 sheets per tick. 3s tick = 60 req/min = exactly the Sheets API per-minute quota
-// (60 read requests/min/user) → blew it, page fell back to stale data. 20s = 9 req/min, safe.
-setInterval(loadAccountReport, 20000);
+// Poll 3s: Raw Data only (1 request/tick). SKU+Setup cached 30s inside liveReport. Stays under quota.
+setInterval(loadAccountReport, 3000);
 </script>
 </body>
 </html>
