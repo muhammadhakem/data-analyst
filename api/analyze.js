@@ -87,13 +87,17 @@ function computeFindings(report) {
     if (withConv.length >= 2) {
       const bestCtr = [...withConv].sort((a, b) => b.ctrNum - a.ctrNum)[0];
       const bestCtor = [...withConv].sort((a, b) => b.ctorNum - a.ctorNum)[0];
-      // host whose conversion moved hardest vs the rest — the lever inside the team
+      // host whose conversion dropped — name only the metric that actually slipped
       const withDelta = withConv.filter(h => h.dCtr != null || h.dCtor != null);
-      const dropping = [...withDelta].sort((a, b) => Math.min(a.dCtr ?? 0, a.dCtor ?? 0) - Math.min(b.dCtr ?? 0, b.dCtor ?? 0))[0];
+      const dropping = [...withDelta].sort((a, b) => Math.min(a.dCtr ?? 99, a.dCtor ?? 99) - Math.min(b.dCtr ?? 99, b.dCtor ?? 99))[0];
       let s = `HOST CONVERSION: best LIVE CTR ${bestCtr.host} ${bestCtr.ctrNum.toFixed(1)}%${bestCtr.dCtr != null ? ` (${sl(bestCtr.dCtr)})` : ''}, ` +
         `best CTOR ${bestCtor.host} ${bestCtor.ctorNum.toFixed(2)}%${bestCtor.dCtor != null ? ` (${sl(bestCtor.dCtor)})` : ''}.`;
-      if (dropping && Math.min(dropping.dCtr ?? 0, dropping.dCtor ?? 0) < -TH)
-        s += ` Watch ${dropping.host} — conversion slipping (CTR ${sl(dropping.dCtr)}, CTOR ${sl(dropping.dCtor)}).`;
+      if (dropping) {
+        const slips = [];
+        if (dropping.dCtr != null && dropping.dCtr < -TH) slips.push(`CTR ${sl(dropping.dCtr)}`);
+        if (dropping.dCtor != null && dropping.dCtor < -TH) slips.push(`CTOR ${sl(dropping.dCtor)}`);
+        if (slips.length) s += ` Watch ${dropping.host} — ${slips.join(' and ')} slipping.`;
+      }
       F.push(s);
     }
   }
